@@ -21,6 +21,14 @@ Passengers follow scripted boarding paths. Layered collision proxies approximate
 
 Station names and order follow the [MTA subway map](https://www.mta.info/map/5256). Travel and boarding times are compressed for gameplay.
 
+## Controls and RCade
+
+- Desktop uses WASD or arrow keys. Press Enter to start or retry.
+- Phones and tablets use the on-screen directional pad and start button.
+- The RCade cabinet and web player use the Player 1 joystick and A button. The one-player start button also starts or retries. The game lays out at 336 × 262, with the 3D scene rendered at one device pixel per CSS pixel. Cabinet best scores last for the current game session.
+
+Append `?cabinet` to the local preview URL to inspect the compact layout with desktop keyboard controls. GitHub Actions builds the same app and publishes it through the official RCade action.
+
 ## Verify
 
 ```sh

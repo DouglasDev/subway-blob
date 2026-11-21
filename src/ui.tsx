@@ -4,6 +4,14 @@ export const Shell = styled.main`
   width: min(1440px, 100%);
   margin: 0 auto;
   padding: 27px clamp(16px, 4.6vw, 72px) 22px;
+
+  html[data-arcade='true'] & {
+    width: min(100%, 336px);
+    height: min(100svh, 262px);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
 `;
 
 export const Header = styled.header`
@@ -12,12 +20,24 @@ export const Header = styled.header`
   justify-content: space-between;
   gap: 18px;
   margin-bottom: 21px;
+
+  html[data-arcade='true'] & {
+    height: 28px;
+    flex: none;
+    margin: 0;
+    padding: 0 7px;
+    gap: 5px;
+  }
 `;
 
 export const Brand = styled.div`
   display: flex;
   gap: 12px;
   align-items: center;
+
+  html[data-arcade='true'] & {
+    gap: 5px;
+  }
 `;
 
 export const Bullet = styled.span`
@@ -32,6 +52,11 @@ export const Bullet = styled.span`
   font-weight: 790;
   font-size: 1.55rem;
   line-height: 1;
+
+  html[data-arcade='true'] & {
+    width: 19px;
+    font-size: 13px;
+  }
 `;
 
 export const Title = styled.h1`
@@ -40,6 +65,11 @@ export const Title = styled.h1`
   letter-spacing: -0.055em;
   line-height: 1.05;
   margin: 0;
+
+  html[data-arcade='true'] & {
+    font-size: 15px;
+    letter-spacing: -0.03em;
+  }
 `;
 
 export const Line = styled.div`
@@ -48,6 +78,10 @@ export const Line = styled.div`
   color: #aeb9ac;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+
+  html[data-arcade='true'] & {
+    display: none;
+  }
 `;
 
 export const Best = styled.div`
@@ -60,6 +94,13 @@ export const Best = styled.div`
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+
+  html[data-arcade='true'] & {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 9px;
+  }
 `;
 
 export const BestValue = styled.strong`
@@ -68,6 +109,10 @@ export const BestValue = styled.strong`
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
+
+  html[data-arcade='true'] & {
+    font-size: 10px;
+  }
 `;
 
 export const Game = styled.section`
@@ -76,6 +121,15 @@ export const Game = styled.section`
   border-radius: 13px;
   background: #182320;
   box-shadow: 0 20px 55px #0b16148c;
+
+  html[data-arcade='true'] & {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 `;
 
 export const Route = styled.div`
@@ -89,6 +143,13 @@ export const Route = styled.div`
   @media (max-width: 600px) {
     gap: 4px;
     padding-inline: 11px;
+  }
+
+  html[data-arcade='true'] & {
+    grid-template-columns: 1.25fr 1fr;
+    flex: none;
+    padding: 3px 5px 4px;
+    gap: 3px;
   }
 `;
 
@@ -104,6 +165,21 @@ export const Stop = styled.div`
     color: #f1f0db;
     font-weight: 700;
   }
+
+  html[data-arcade='true'] & {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+`;
+
+export const StopName = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 export const RouteLabel = styled.span`
@@ -111,6 +187,11 @@ export const RouteLabel = styled.span`
   font: 0.64rem var(--mono);
   letter-spacing: 0.07em;
   text-transform: uppercase;
+
+  html[data-arcade='true'] & {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
 `;
 
 export const RouteDot = styled.span`
@@ -145,6 +226,10 @@ export const RouteDot = styled.span`
     border-color: #ffad8e;
     box-shadow: 0 0 0 3px #21312b;
   }
+
+  html[data-arcade='true'] & {
+    display: none;
+  }
 `;
 
 export const Stage = styled.div`
@@ -155,6 +240,12 @@ export const Stage = styled.div`
 
   @media (max-width: 650px) {
     height: clamp(370px, calc(100svh - 255px), 620px);
+  }
+
+  html[data-arcade='true'] & {
+    height: auto;
+    min-height: 0;
+    flex: 1;
   }
 `;
 
@@ -195,6 +286,14 @@ export const Status = styled.div`
     background: #ffc779;
     box-shadow: 0 0 7px #ffc779ad;
   }
+
+  html[data-arcade='true'] & {
+    top: 5px;
+    left: 5px;
+    padding: 3px 5px;
+    font-size: 9px;
+    gap: 4px;
+  }
 `;
 
 export const Flow = styled.div`
@@ -207,6 +306,13 @@ export const Flow = styled.div`
   padding: 7px 10px;
   font: 0.67rem var(--mono);
   color: #eeead3;
+
+  html[data-arcade='true'] & {
+    top: 5px;
+    right: 5px;
+    padding: 3px 4px;
+    font-size: 9px;
+  }
 `;
 
 export const Overlay = styled.div`
@@ -218,6 +324,10 @@ export const Overlay = styled.div`
   pointer-events: none;
   padding: 18px;
   background: linear-gradient(0deg, #101a16c7 0%, transparent 50%);
+
+  html[data-arcade='true'] & {
+    padding: 5px;
+  }
 `;
 
 export const Card = styled.div`
@@ -238,6 +348,13 @@ export const Card = styled.div`
     padding: 12px;
     gap: 9px;
   }
+
+  html[data-arcade='true'] & {
+    width: 100%;
+    padding: 5px 6px;
+    gap: 5px;
+    border-radius: 4px;
+  }
 `;
 
 export const Prompt = styled.div`
@@ -246,6 +363,11 @@ export const Prompt = styled.div`
   color: #c9d1be;
   font-size: 0.81rem;
   line-height: 1.4;
+
+  html[data-arcade='true'] & {
+    font-size: 9px;
+    gap: 2px;
+  }
 `;
 
 export const PromptTitle = styled.strong`
@@ -253,6 +375,10 @@ export const PromptTitle = styled.strong`
   font-size: 1.11rem;
   letter-spacing: -0.025em;
   line-height: 1.2;
+
+  html[data-arcade='true'] & {
+    font-size: 13px;
+  }
 `;
 
 export const Button = styled.button`
@@ -269,6 +395,12 @@ export const Button = styled.button`
   &:hover {
     background: #def3b3;
   }
+
+  html[data-arcade='true'] & {
+    min-height: 25px;
+    padding: 4px 7px;
+    font-size: 10px;
+  }
 `;
 
 export const Dashboard = styled.div`
@@ -280,6 +412,11 @@ export const Dashboard = styled.div`
 
   @media (max-width: 730px) {
     grid-template-columns: 1fr 1fr minmax(100px, 1.35fr);
+  }
+
+  html[data-arcade='true'] & {
+    grid-template-columns: 67px 62px 1fr;
+    flex: none;
   }
 `;
 
@@ -294,6 +431,11 @@ export const Metric = styled.div`
     min-width: 0;
     padding-inline: 10px;
   }
+
+  html[data-arcade='true'] & {
+    padding: 3px 6px;
+    gap: 2px;
+  }
 `;
 
 export const MetricName = styled.span`
@@ -302,12 +444,20 @@ export const MetricName = styled.span`
   letter-spacing: 0.08em;
   font: 0.64rem var(--mono);
   white-space: nowrap;
+
+  html[data-arcade='true'] & {
+    font-size: 9px;
+  }
 `;
 
 export const MetricValue = styled.strong`
   color: #f4efd9;
   font: 650 1.14rem var(--mono);
   line-height: 1.08;
+
+  html[data-arcade='true'] & {
+    font-size: 13px;
+  }
 `;
 
 export const Gauge = styled.div`
@@ -317,6 +467,10 @@ export const Gauge = styled.div`
   @media (max-width: 730px) {
     padding-inline: 10px;
   }
+
+  html[data-arcade='true'] & {
+    padding: 3px 6px;
+  }
 `;
 
 export const GaugeCaption = styled.div`
@@ -324,11 +478,19 @@ export const GaugeCaption = styled.div`
   justify-content: space-between;
   gap: 4px;
   margin-bottom: 5px;
+
+  html[data-arcade='true'] & {
+    margin-bottom: 3px;
+  }
 `;
 
 export const GaugeValue = styled.span`
   color: #dce9c1;
   font: 0.64rem var(--mono);
+
+  html[data-arcade='true'] & {
+    font-size: 9px;
+  }
 `;
 
 export const GaugeBar = styled.progress`
@@ -361,6 +523,10 @@ export const GaugeBar = styled.progress`
   &[data-high='true'] {
     color: #f4ab69;
   }
+
+  html[data-arcade='true'] & {
+    height: 6px;
+  }
 `;
 
 export const Controls = styled.div`
@@ -373,6 +539,10 @@ export const Controls = styled.div`
   font-size: 0.75rem;
 
   @media (max-width: 730px), (pointer: coarse) {
+    display: none;
+  }
+
+  html[data-arcade='true'] & {
     display: none;
   }
 `;
@@ -390,12 +560,23 @@ export const Pad = styled.div`
   position: absolute;
   bottom: 12px;
   left: 12px;
-  grid-template-columns: repeat(3, 39px);
-  grid-template-rows: repeat(2, 39px);
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(2, 44px);
   gap: 4px;
 
   @media (pointer: coarse), (max-width: 730px) {
     display: grid;
+  }
+
+  html[data-arcade='true'] & {
+    @media (pointer: fine) {
+      display: none;
+    }
+    bottom: 4px;
+    left: 4px;
+    grid-template-columns: repeat(3, 27px);
+    grid-template-rows: repeat(2, 27px);
+    gap: 2px;
   }
 `;
 
@@ -429,5 +610,9 @@ export const PadButton = styled.button`
 
   &:active {
     background: #526649;
+  }
+
+  html[data-arcade='true'] & {
+    font-size: 12px;
   }
 `;

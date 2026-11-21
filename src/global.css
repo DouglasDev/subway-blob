@@ -23,3 +23,9 @@ button:focus-visible {
   outline: 2px solid #f6efdb;
   outline-offset: 3px;
 }
+
+html[data-arcade='true'] body {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}

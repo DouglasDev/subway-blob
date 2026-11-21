@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS } from './sim/crowd.ts';
 import { Ride } from './sim/ride.ts';
@@ -36,6 +37,7 @@ import {
   Stage,
   Status,
   Stop,
+  StopName,
   Title,
   View,
 } from './ui';
@@ -94,7 +96,7 @@ function StopMarker({ name, label, current }: { name: string; label: string; cur
     <Stop data-current={!!current}>
       <RouteLabel>{label}</RouteLabel>
       <RouteDot data-current={!!current} />
-      <span>{name}</span>
+      <StopName title={name}>{name}</StopName>
     </Stop>
   );
 }
@@ -108,14 +110,54 @@ export function App() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const keys = useRef(new Set<string>());
   const touches = useRef(new Map<number, string>());
+  const arcade = useRef<typeof import('@rcade/plugin-input-classic') | null>(null);
+  const pressed = useRef(false);
+  const keyboardStart = useRef(false);
+
+  const restart = useCallback(() => {
+    const next = new Ride();
+
+    next.start();
+    keys.current.clear();
+    touches.current.clear();
+    setShowResult(false);
+    setHud(snapshot(next));
+    setRide(next);
+  }, []);
 
   useEffect(() => {
+    if (!arcadeEmbedded) return;
+
+    let active = true;
+
+    void import('@rcade/plugin-input-classic').then((controls) => {
+      if (active) arcade.current = controls;
+    });
+
+    return () => {
+      active = false;
+      arcade.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (arcadeEmbedded) return;
+
     const clear = () => {
       keys.current.clear();
       touches.current.clear();
     };
 
     const down = (event: KeyboardEvent) => {
+      if (
+        !event.repeat &&
+        (event.code === 'Enter' || event.code === 'Space') &&
+        !(event.target instanceof HTMLButtonElement)
+      ) {
+        event.preventDefault();
+        keyboardStart.current = true;
+      }
+
       if (!keyDirection[event.code]) return;
 
       event.preventDefault();
@@ -145,7 +187,7 @@ export function App() {
     let view: ReturnType<typeof createScene>;
 
     try {
-      view = createScene(canvas.current, ride);
+      view = createScene(canvas.current, ride, arcadeMode);
     } catch {
       setGraphicsError(true);
 
@@ -163,8 +205,25 @@ export function App() {
 
       previous = now;
       const movement = new Set(Array.from(keys.current, (key) => keyDirection[key]));
+      const controls = arcade.current;
 
       for (const direction of touches.current.values()) movement.add(direction);
+
+      if (controls) {
+        for (const [direction, held] of Object.entries(controls.PLAYER_1.DPAD)) {
+          if (held) movement.add(direction);
+        }
+      }
+
+      const cabinetStart = !!(controls?.PLAYER_1.A || controls?.SYSTEM.ONE_PLAYER);
+      const activate = keyboardStart.current || (cabinetStart && !pressed.current);
+
+      pressed.current = cabinetStart;
+      keyboardStart.current = false;
+
+      if (activate && ride.phase === 'ready') ride.start();
+      else if (activate && (ride.phase === 'complete' || (poppedAt >= 0 && now - poppedAt > 640)))
+        restart();
 
       ride.advance(dt, {
         x: Number(movement.has('right')) - Number(movement.has('left')),
@@ -193,7 +252,7 @@ export function App() {
       cancelAnimationFrame(frame);
       view.dispose();
     };
-  }, [ride]);
+  }, [restart, ride]);
 
   useEffect(() => {
     if (hud.score <= best) return;
@@ -206,17 +265,6 @@ export function App() {
       // Keep the current tab's best when storage is disabled.
     }
   }, [best, hud.score]);
-
-  function restart() {
-    const next = new Ride();
-
-    next.start();
-    keys.current.clear();
-    touches.current.clear();
-    setShowResult(false);
-    setHud(snapshot(next));
-    setRide(next);
-  }
 
   const ended = hud.phase === 'popped' || hud.phase === 'complete';
   const result = hud.phase === 'complete' || showResult;
@@ -232,7 +280,7 @@ export function App() {
           </div>
         </Brand>
         <Best>
-          Personal best
+          {arcadeMode ? 'Best' : 'Personal best'}
           <BestValue>
             {best} {best === 1 ? 'stop' : 'stops'}
           </BestValue>
@@ -241,7 +289,7 @@ export function App() {
 
       <Game aria-label="Subway Blob simulator">
         <Route aria-label="Train route">
-          <StopMarker label="Previous" name={STATIONS[hud.stop - 1] ?? '—'} />
+          {!arcadeMode && <StopMarker label="Previous" name={STATIONS[hud.stop - 1] ?? '—'} />}
           <StopMarker
             label={hud.phase === 'running' ? 'Departed' : 'Station'}
             name={STATIONS[hud.stop]}
@@ -300,11 +348,19 @@ export function App() {
                     ? 'Enable WebGL in your browser to play.'
                     : result
                       ? `${STATIONS[hud.stop]} · ${hud.score} ${hud.score === 1 ? 'stop' : 'stops'} survived`
-                      : 'Steer into open gaps before riders crowd you out.'}
+                      : arcadeMode
+                        ? 'Joystick to steer'
+                        : 'Steer into open gaps before riders crowd you out.'}
                 </Prompt>
                 {!graphicsError && (
                   <Button type="button" onClick={result ? restart : () => ride.start()}>
-                    {result ? 'Ride again' : 'Start ride'}
+                    {arcadeMode
+                      ? result
+                        ? 'A · Retry'
+                        : 'A · Start'
+                      : result
+                        ? 'Ride again'
+                        : 'Start ride'}
                   </Button>
                 )}
               </Card>
@@ -314,11 +370,11 @@ export function App() {
 
         <Dashboard>
           <Metric>
-            <MetricName>Stops survived</MetricName>
+            <MetricName>{arcadeMode ? 'Stops' : 'Stops survived'}</MetricName>
             <MetricValue>{String(hud.score).padStart(2, '0')}</MetricValue>
           </Metric>
           <Metric>
-            <MetricName>Riders in car</MetricName>
+            <MetricName>{arcadeMode ? 'Riders' : 'Riders in car'}</MetricName>
             <MetricValue>{String(hud.onboard).padStart(2, '0')}</MetricValue>
           </Metric>
           <Gauge>
