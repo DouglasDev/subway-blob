@@ -6,7 +6,6 @@ import {
   DOUBLE_PICKUP_STOP,
   powerDeck,
   POWERS,
-  QUIET_SECONDS,
 } from '../src/sim/powers.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -381,10 +380,25 @@ test('guest proximity drains tolerance, while Cool Pack heals and Quiet Bubble p
   ride.usePower(0);
   ride.tick({ x: 0, z: 0 });
   assert.ok(ride.tolerance >= 0.75);
+  assert.equal(ride.fluid.volume, STANDARD_VOLUME);
+
+  ride.tolerance = 0.9;
+  ride.inventory[0] = 'cool';
+  ride.usePower(0);
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.tolerance, 1);
   ride.inventory[1] = 'shield';
   ride.usePower(1);
   ride.tick({ x: 0, z: 0 });
-  assert.ok(ride.shieldUntil >= ride.time + QUIET_SECONDS - STEP);
+  const activatedAt = ride.time;
+
+  assert.ok(Math.abs(ride.shieldUntil - activatedAt - 7.44) < 1e-9);
+
+  for (let i = 0; i < 148; i++) ride.tick({ x: 0, z: 0 });
+
+  assert.ok(ride.time < ride.shieldUntil);
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(ride.time >= ride.shieldUntil);
   assert.deepEqual(ride.inventory, [null, null]);
 });
 

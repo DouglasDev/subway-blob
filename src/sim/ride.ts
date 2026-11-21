@@ -15,11 +15,11 @@ import { guestContent } from './guestContent.ts';
 import {
   candyLocation,
   CANDY_SECONDS,
+  COOL_POINTS,
   crowdPressure,
   DOUBLE_PICKUP_STOP,
   EXPRESS_SECONDS,
   powerDeck,
-  QUIET_SECONDS,
 } from './powers.ts';
 import type { Power } from './powers.ts';
 import { stationIndex, travelDirection } from './route.ts';
@@ -31,7 +31,10 @@ export const STANDARD_VOLUME = 245;
 export const HOT_VOLUME = 306;
 
 const TRAVEL = 4.5;
+const ARRIVAL = 0.48;
 const DWELL = 6.3;
+const CLOSING = 3.6;
+const QUIET_SECONDS = (ARRIVAL + DWELL + CLOSING + TRAVEL) / 2;
 
 export type Input = { x: number; z: number };
 
@@ -265,7 +268,7 @@ export class Ride {
       this.setPhase('closing');
     }
 
-    if (this.phase === 'closing' && this.phaseTime >= 3.6) {
+    if (this.phase === 'closing' && this.phaseTime >= CLOSING) {
       this.score++;
       this.setPhase('running');
     }
@@ -316,7 +319,7 @@ export class Ride {
       this.animation = { cue: power, began: this.time, until: this.time + 2.5 };
       this.cues.push(power);
 
-      if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + 0.25);
+      if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + COOL_POINTS / 100);
       else if (power === 'shield') this.shieldUntil = this.time + QUIET_SECONDS;
       else if (power === 'express') this.expressUntil = this.time + EXPRESS_SECONDS;
       else {
@@ -420,7 +423,7 @@ export class Ride {
         this.stop++;
         this.arrive();
       }
-    } else if (this.phase === 'arriving' && this.phaseTime >= 0.48) {
+    } else if (this.phase === 'arriving' && this.phaseTime >= ARRIVAL) {
       if (this.encounter && this.stop >= this.encounter.expires) {
         this.crowd.endEncounter();
         this.encounter = null;

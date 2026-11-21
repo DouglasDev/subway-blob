@@ -18,7 +18,7 @@ export const POWERS = catalog;
 
 export const DOUBLE_PICKUP_STOP = 7;
 
-export const QUIET_SECONDS = 18;
+export const COOL_POINTS = 25;
 
 export const EXPRESS_SECONDS = 10;
 

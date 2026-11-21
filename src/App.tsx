@@ -3,7 +3,7 @@ import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS, stationIndex } from './sim/route.ts';
 import { ENCOUNTERS } from './sim/encounters.ts';
-import { POWERS } from './sim/powers.ts';
+import { COOL_POINTS, POWERS } from './sim/powers.ts';
 import { ACROBAT_MOVES, MUSICIAN_SONGS, PRANKS } from './sim/guestContent.ts';
 import { RideAudio } from './audio';
 import { Ride } from './sim/ride.ts';
@@ -546,12 +546,13 @@ export function App() {
                 disabled={!power || ended}
                 aria-label={
                   power
-                    ? `Use ${POWERS[power].name} in slot ${slot + 1}`
+                    ? `Use ${POWERS[power].name} in slot ${slot + 1}${power === 'cool' ? `. Restore up to ${COOL_POINTS} squeeze tolerance points` : ''}`
                     : `Empty power-up slot ${slot + 1}`
                 }
                 onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
               >
                 <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
+                {power === 'cool' && ` · +${COOL_POINTS} tolerance`}
               </InventorySlot>
             );
           })}
