@@ -1,18 +1,25 @@
-name: Deploy to RCade
+name: Publish Subway Blob
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: project-launcher-pages
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  build:
+    name: Build and test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -22,4 +29,48 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test
       - run: pnpm build
+      - name: Verify static output and record the release revision
+        run: |
+          test -f dist/index.html
+          test -z "$(find dist -type l -print -quit)"
+          test -z "$(find dist -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' -o -name '*.map' \) -print -quit)"
+          printf '%s\n' "$GITHUB_SHA" > dist/launcher-release.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rcade-build
+          path: dist
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  rcade:
+    name: Deploy to RCade
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: rcade-build
+          path: dist
       - uses: fcjr/RCade/action-deploy@e44a75efd379622ccdb402350d7ad7ea00dd96ea
+
+  pages:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
