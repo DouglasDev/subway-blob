@@ -8,6 +8,10 @@ export const HEIGHT_LIMIT = 1.7;
 
 export const DOORS = [-2.7, 2.7];
 
+export const BENCH_DEPTH = 0.18;
+
+export const BENCH_Z = CAR_WIDTH / 2 - BENCH_DEPTH / 2;
+
 export const BENCHES = [
   { x: -4.04, length: 1.45 },
   { x: 0, length: 3.8 },
@@ -20,12 +24,12 @@ export function createCar() {
 
   for (const { x, length } of BENCHES) {
     for (const side of [-1, 1]) {
-      const z = side * 1.02;
+      const z = side * BENCH_Z;
 
       grid.block(
         fixtures,
-        { x: x - length / 2, y: 0, z: z - 0.18 },
-        { x: x + length / 2, y: 0.47, z: z + 0.18 },
+        { x: x - length / 2, y: 0, z: z - BENCH_DEPTH / 2 },
+        { x: x + length / 2, y: 0.47, z: z + BENCH_DEPTH / 2 },
       );
     }
   }

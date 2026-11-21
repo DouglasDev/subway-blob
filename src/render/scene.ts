@@ -63,6 +63,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride) {
   let lastTick = -1;
   let lastPhase = '';
   let aspect = 1;
+  let cameraLift = 0;
 
   const resize = new ResizeObserver(() => {
     const { clientWidth, clientHeight } = canvas;
@@ -108,9 +109,15 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride) {
 
       goal.set(ride.fluid.x * 0.74, 0.85, (ride.fluid.z - 0.32) * 0.5);
       focus.lerp(goal, 1 - Math.exp(-4 * dt));
+      cameraLift += (ride.fluid.pressure * 1.55 - cameraLift) * (1 - Math.exp(-3 * dt));
       const narrow = aspect < 1 ? (1 - aspect) * 2.15 : 0;
 
-      camera.position.set(focus.x + 2.15, 3.35 + narrow * 0.35, focus.z + 5.0 + narrow);
+      camera.position.set(
+        focus.x + 2.15,
+        3.35 + cameraLift + narrow * 0.35,
+        focus.z + 5.0 + narrow,
+      );
+
       camera.lookAt(focus);
       renderer.render(scene, camera);
     },

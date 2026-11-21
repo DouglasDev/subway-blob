@@ -1,5 +1,5 @@
 import * as T from 'three';
-import { BENCHES, CAR_LENGTH, CAR_WIDTH, DOORS } from '../sim/car.ts';
+import { BENCHES, BENCH_DEPTH, BENCH_Z, CAR_LENGTH, CAR_WIDTH, DOORS } from '../sim/car.ts';
 import { STATIONS } from '../sim/crowd.ts';
 
 const paint = (color: number, metalness = 0, roughness = 0.72) =>
@@ -94,14 +94,23 @@ export function buildCar(scene: T.Scene) {
     box(car, glass, x, 1.38, back + 0.094, Math.min(length - 0.27, 3.29), 0.51, 0.015);
 
     for (const side of [-1, 1]) {
-      const z = 1.02 * side;
+      const z = BENCH_Z * side;
       const count = Math.round(length / 0.47);
 
-      box(car, steel, x, 0.18, z, length, 0.36, 0.36);
-      box(car, seat, x, 0.414, z, length, 0.105, 0.36);
+      box(car, steel, x, 0.18, z, length, 0.36, BENCH_DEPTH);
+      box(car, seat, x, 0.414, z, length, 0.105, BENCH_DEPTH);
 
       for (let index = 1; index < count; index++) {
-        box(car, darkSteel, x + (index / count - 0.5) * length, 0.468, z, 0.009, 0.004, 0.33);
+        box(
+          car,
+          darkSteel,
+          x + (index / count - 0.5) * length,
+          0.468,
+          z,
+          0.009,
+          0.004,
+          BENCH_DEPTH - 0.02,
+        );
       }
 
       if (side < 0) box(car, seat, x, 0.66, -1.111, length, 0.36, 0.13);
@@ -178,7 +187,7 @@ export function buildTrack(scene: T.Scene) {
   }
 
   const signs = STATIONS.map((name) =>
-    label(platform, 3.6, 0.35, 0, 1.64, -3.71, '#1b2b2c', (ctx) => {
+    label(platform, 3.6, 0.35, 0, 2.23, -3.71, '#1b2b2c', (ctx) => {
       ctx.fillStyle = '#fff7dd';
       ctx.font = 'bold 52px sans-serif';
       ctx.textAlign = 'center';

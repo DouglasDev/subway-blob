@@ -12,7 +12,8 @@
     "format:check": "eslint . --max-warnings=0 && oxfmt --check",
     "prepare": "husky",
     "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "node --experimental-transform-types --test --test-isolation=none tests/*.test.ts"
   },
   "dependencies": {
     "@linaria/react": "7.0.1",
@@ -25,6 +26,7 @@
     "@babel/preset-react": "7.28.5",
     "@babel/preset-typescript": "7.28.5",
     "@stylistic/eslint-plugin": "5.10.0",
+    "@types/node": "^24.19.2",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@types/three": "^0.187.0",
