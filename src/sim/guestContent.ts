@@ -161,6 +161,16 @@ export const PRANKS = [
       'Eric: The horses are refusing to go local.',
     ],
   },
+  {
+    name: 'Rhino on the 4',
+    lines: [
+      'Eric: Rhino coming through. He has exact change.',
+      'Eric: The horn is my MetroCard.',
+      'Eric: Sorry. He is still learning what an aisle is.',
+      'Eric: Please remain calm. He only charges at express stops.',
+      'Eric: Does anybody know a good rhino tailor?',
+    ],
+  },
 ] as const;
 
 export function guestContent(random: () => number) {

@@ -43,7 +43,7 @@ const faces = [
 ];
 const triangles = [0, 1, 2, 0, 2, 3];
 
-export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
+export function buildBlob(scene: T.Object3D, fluid: Fluid, blocked: Uint8Array) {
   const group = new T.Group();
   const geometry = new T.BufferGeometry();
   const maxVertices = Math.max(fluid.volume, HOT_VOLUME) * 36;
@@ -69,15 +69,47 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   mesh.frustumCulled = false;
   group.add(mesh);
 
-  const eyeMaterial = new T.MeshBasicMaterial({ color: 0x253227 });
-  const eyeGeometry = new T.SphereGeometry(1, 12, 8);
-  const eyes = [-1, 1].map(() => {
-    const eye = new T.Mesh(eyeGeometry, eyeMaterial);
+  slime.onBeforeCompile = (shader) => {
+    shader.vertexShader = 'varying vec3 blobPoint;\n' + shader.vertexShader;
 
-    eye.scale.set(0.028, 0.043, 0.019);
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\nblobPoint = position;',
+    );
+
+    shader.fragmentShader = 'varying vec3 blobPoint;\n' + shader.fragmentShader;
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `
+      #include <color_fragment>
+      float current = sin(blobPoint.y * 17.0 + sin(blobPoint.x * 10.0) * 1.4 + blobPoint.z * 8.0);
+      diffuseColor.rgb *= 0.94 + 0.10 * smoothstep(-0.5, 0.85, current);
+    `,
+    );
+  };
+
+  const eyeGeometry = new T.SphereGeometry(1, 12, 8);
+  const whites = new T.MeshBasicMaterial({ color: 0xf4e9c0 });
+  const ink = new T.MeshBasicMaterial({ color: 0x29332b });
+  const eyes = [-1, 1].map(() => {
+    const eye = new T.Group();
+    const white = new T.Mesh(eyeGeometry, whites);
+    const pupil = new T.Mesh(eyeGeometry, ink);
+    const lid = new T.Mesh(eyeGeometry, slime);
+    const brow = new T.Mesh(eyeGeometry, ink);
+
+    white.scale.set(0.043, 0.047, 0.026);
+    pupil.position.set(0, -0.004, 0.027);
+    pupil.scale.set(0.019, 0.029, 0.011);
+    lid.position.set(0, 0.035, 0.029);
+    lid.scale.set(0.043, 0.019, 0.015);
+    brow.position.set(0, 0.057, 0.022);
+    brow.scale.set(0.047, 0.009, 0.012);
+    eye.add(white, pupil, lid, brow);
     group.add(eye);
 
-    return eye;
+    return { eye, lid, brow, pupil };
   });
 
   scene.add(group);
@@ -87,6 +119,7 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const eyeOrigin = new T.Vector3();
   const forward = new T.Vector3();
   const inward = new T.Vector3();
+  const worldFacing = new T.Quaternion();
   const eyePoints = [new T.Vector3(), new T.Vector3()];
   let previousFacing = Infinity;
   let previousX = Infinity;
@@ -96,11 +129,37 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const green = new T.Color(0xb6ec58);
   const amber = new T.Color(0xffbc48);
   const red = new T.Color(0xf74136);
+  const blue = new T.Color(0x54a9ff);
+  const aqua = new T.Color(0x53f3c7);
 
-  return (popped: boolean, heat: number, wobble: number, facing: number) => {
+  return (
+    popped: boolean,
+    heat: number,
+    wobble: number,
+    facing: number,
+    riders = 12,
+    quiet = false,
+    superFluid = false,
+  ) => {
     slime.color
       .copy(heat < 0.5 ? green : amber)
       .lerp(heat < 0.5 ? amber : red, heat < 0.5 ? heat * 2 : (heat - 0.5) * 2);
+
+    if (quiet) slime.color.copy(blue);
+    else if (superFluid) slime.color.lerp(aqua, 0.64);
+
+    const fatigue = T.MathUtils.clamp((riders - 12) / 55, 0, 1);
+
+    for (const [index, { lid, brow, pupil }] of eyes.entries()) {
+      const tilt = (index === 0 ? 1 : -1) * (0.11 + fatigue * 0.42);
+
+      lid.position.y = 0.034 - fatigue * 0.023;
+      lid.scale.y = 0.021 + fatigue * 0.012;
+      lid.rotation.z = brow.rotation.z = tilt;
+      brow.position.y = 0.06 - fatigue * 0.003;
+      pupil.position.y = -0.007 - fatigue * 0.012;
+      pupil.scale.y = 0.025 - fatigue * 0.006;
+    }
 
     slime.emissive.copy(slime.color).multiplyScalar(0.38);
     group.position.x = wobble * 0.13;
@@ -161,10 +220,10 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
     previousX = fluid.x;
     previousZ = fluid.z;
     forward.set(Math.sin(facing), 0, Math.cos(facing));
-    inward.copy(forward).negate();
-    group.updateMatrixWorld(true);
+    group.updateWorldMatrix(true, true);
+    inward.copy(forward).negate().applyQuaternion(group.getWorldQuaternion(worldFacing));
 
-    for (const eye of eyes) eye.visible = false;
+    for (const { eye } of eyes) eye.visible = false;
 
     // Cast onto the current surface so the eyes also follow compressed shapes.
     for (const [height, spacing] of [
@@ -195,7 +254,7 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
 
       if (hits !== eyes.length) continue;
 
-      for (const [index, eye] of eyes.entries()) {
+      for (const [index, { eye }] of eyes.entries()) {
         eye.position.copy(eyePoints[index]);
         eye.rotation.y = facing;
         eye.visible = true;

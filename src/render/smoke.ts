@@ -6,7 +6,7 @@ import { riderFacing, riderSize } from './riders';
 const EMIT_INTERVAL = 0.22;
 const PUFF_LIFETIME = 4.3;
 
-export function buildSmoke(scene: T.Scene) {
+export function buildSmoke(scene: T.Object3D) {
   const texture = canvasTexture(96, 96, (ctx) => {
     for (const [x, y, radius] of [
       [48, 49, 37],

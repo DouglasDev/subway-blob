@@ -17,14 +17,33 @@ export const ENCOUNTERS = {
   smoker: { name: 'Weed smoke', stops: 1 },
   ac: { name: 'AC out · +25% volume', stops: 1 },
   takes: { name: 'SubwayTakes', stops: 2 },
+  speaker: { name: 'Loudspeaker', stops: 1 },
+  soda: { name: 'Sticky soda spill', stops: 1 },
+  spreader: { name: 'Manspreader', stops: 1 },
+  shover: { name: 'Shoving rider', stops: 1 },
   weird: { name: 'A rider is following you', stops: 1 },
 } as const;
 
 export type Encounter = keyof typeof ENCOUNTERS;
 
-export type Cue = Encounter | Power | 'announcement' | 'chime' | 'pickup' | 'pop';
+export type Cue =
+  | Encounter
+  | Power
+  | 'announcement'
+  | 'chime'
+  | 'pickup'
+  | 'pop'
+  | 'trackJolt'
+  | 'brakeJolt'
+  | 'shove'
+  | 'murmur'
+  | 'rhino';
 
-export const ENCOUNTER_CYCLE = 12;
+export function hasGuest(kind: Encounter) {
+  return kind !== 'ac' && kind !== 'speaker' && kind !== 'soda';
+}
+
+export const ENCOUNTER_CYCLE = 16;
 
 export function shuffle<T>(items: T[], random: () => number) {
   for (let index = items.length - 1; index > 0; index--) {

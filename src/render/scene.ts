@@ -5,6 +5,7 @@ import { buildCar, buildTrack } from './carScene';
 import { buildRiders } from './riders';
 import { buildRideObjects } from './rideObjects';
 import { buildPowerEffects } from './powerEffects';
+import { buildHazards } from './hazards';
 import { buildSmoke } from './smoke';
 
 export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = false) {
@@ -17,7 +18,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   renderer.setPixelRatio(arcade ? 1 : Math.min(window.devicePixelRatio, 1.6));
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.16;
+  renderer.toneMappingExposure = 1.16 * (arcade ? 1.2 : 1);
   const scene = new T.Scene();
 
   scene.background = new T.Color(0x152123);
@@ -32,24 +33,33 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   fill.position.set(2, 2, 6);
   scene.add(fill);
 
-  const camera = new T.PerspectiveCamera(48, 1, 0.1, 55);
+  const camera = new T.PerspectiveCamera(
+    !arcade && canvas.dataset.touch === 'true' ? 43 : 48,
+    1,
+    0.1,
+    55,
+  );
   const focus = new T.Vector3(0, 0.78, -0.29);
   const goal = new T.Vector3();
-  const updateDoors = buildCar(scene);
+  const car = new T.Group();
+
+  scene.add(car);
+  const updateDoors = buildCar(car);
   const updateTrack = buildTrack(scene);
-  const updateCrowd = buildRiders(scene);
-  const updateObjects = buildRideObjects(scene);
-  const updatePower = buildPowerEffects(scene);
-  const updateSmoke = buildSmoke(scene);
-  const updateBlob = buildBlob(scene, ride.fluid, ride.mask);
+  const updateCrowd = buildRiders(car);
+  const updateObjects = buildRideObjects(car);
+  const updatePower = buildPowerEffects(car);
+  const updateSmoke = buildSmoke(car);
+  const updateBlob = buildBlob(car, ride.fluid, ride.mask);
+  const updateHazards = buildHazards(car);
   const burst = new T.Group();
-  const dropGeometry = new T.IcosahedronGeometry(0.065, 1);
+  const dropGeometry = new T.IcosahedronGeometry(0.078, 1);
   const dropMaterial = new T.MeshStandardMaterial({
     color: 0xbdf070,
     emissive: 0x577a24,
     roughness: 0.3,
   });
-  const drops = Array.from({ length: 34 }, (_, index) => {
+  const drops = Array.from({ length: 62 }, (_, index) => {
     const mesh = new T.Mesh(dropGeometry, dropMaterial);
     const angle = index * 2.39996;
 
@@ -57,14 +67,22 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
     return {
       mesh,
+      scale: 0.56 + (index % 7) * 0.18,
       vx: Math.cos(angle) * (1 + (index % 4) * 0.61),
       vz: Math.sin(angle) * (1 + (index % 4) * 0.61),
-      vy: 1.5 + (index % 7) * 0.45,
+      vy: 1.9 + (index % 7) * 0.56,
     };
   });
 
   burst.visible = false;
-  scene.add(burst);
+  const shockwave = new T.Mesh(
+    new T.TorusGeometry(1, 0.039, 8, 44),
+    new T.MeshBasicMaterial({ color: 0xbaff85, transparent: true, depthWrite: false }),
+  );
+
+  shockwave.rotation.x = -Math.PI / 2;
+  burst.add(shockwave);
+  car.add(burst);
   let popTime = 0;
   let lastTick = -1;
   let lastPhase = '';
@@ -95,7 +113,23 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
   return {
     draw(dt: number) {
+      const fov = !arcade && canvas.dataset.touch === 'true' ? 43 : 48;
+
+      if (camera.fov !== fov) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+      }
+
       const popped = ride.phase === 'popped';
+
+      const joltAge = ride.jolt ? ride.time - ride.jolt.at : Infinity;
+      const jolt =
+        ride.jolt && joltAge < 0.56
+          ? ride.jolt.strength * Math.sin(joltAge * 25) * Math.exp(-joltAge * 7.5)
+          : 0;
+
+      car.position.set(jolt * 0.24, Math.abs(jolt) * 0.065, -jolt * 0.066);
+      car.rotation.z = -jolt * 0.028;
 
       if (lastTick !== ride.time || lastPhase !== ride.phase) {
         updateDoors(ride.door);
@@ -108,9 +142,20 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
               }
             : undefined;
 
-        updateCrowd(ride.crowd.riders, acrobat);
+        const shove = ride.shove;
+        const shover = ride.act?.role === 'shover' ? ride.act : undefined;
+
+        updateCrowd(
+          ride.crowd.riders,
+          acrobat,
+          shove && shover
+            ? { id: shover.id, age: ride.time - shove.at, heading: Math.atan2(shove.x, shove.z) }
+            : undefined,
+        );
+
         updateObjects(ride);
         updatePower(ride);
+        updateHazards(ride);
         lastTick = ride.time;
         lastPhase = ride.phase;
       }
@@ -122,21 +167,34 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
       const heat = Math.max(1 - ride.tolerance, ride.squeeze, ride.guestPressure * 0.52);
 
-      updateBlob(popped, heat, crazy ? Math.sin(ride.time * 28) : 0, ride.facing);
+      updateBlob(
+        popped,
+        heat,
+        crazy ? Math.sin(ride.time * 28) : 0,
+        ride.facing,
+        ride.crowd.onboard,
+        ride.time < ride.shieldUntil,
+        ride.time < ride.fluidUntil,
+      );
 
       if (popped) {
         popTime += dt;
-        burst.visible = popTime < 0.85;
+        burst.visible = popTime < 1.38;
+        shockwave.position.y = -0.51;
+        shockwave.scale.setScalar(0.15 + popTime * 3.8);
+        shockwave.material.opacity = Math.max(0, 0.95 - popTime * 1.7);
+        dropMaterial.color.setHex(popTime < 0.12 ? 0xf2ffca : 0xbdf070);
         burst.position.set(ride.fluid.x, 0.65, ride.fluid.z);
 
-        for (const { mesh, vx, vy, vz } of drops) {
+        for (const { mesh, vx, vy, vz, scale } of drops) {
           mesh.position.set(
             vx * popTime,
-            Math.max(-0.63, vy * popTime - 5 * popTime ** 2),
+            Math.max(-0.63, vy * popTime - 7.8 * popTime ** 2),
             vz * popTime,
           );
 
-          mesh.scale.setScalar(1 + popTime * -0.82);
+          mesh.scale.setScalar(scale * Math.max(0, 1 - popTime * 0.74));
+          mesh.rotation.set(popTime * 8, popTime * vx, popTime * vz);
         }
       }
 
@@ -151,7 +209,8 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       goal.set(focusX, 0.85, (ride.fluid.z - 0.32) * 0.5);
       focus.lerp(goal, 1 - Math.exp(-4 * dt));
       cameraLift += (ride.squeeze * 1.55 - cameraLift) * (1 - Math.exp(-3 * dt));
-      const narrow = aspect < 1 ? (1 - aspect) * 2.15 : 0;
+      const narrow =
+        aspect < 1 ? (1 - aspect) * (canvas.dataset.touch === 'true' ? 1.73 : 2.15) : 0;
 
       camera.position.set(
         focus.x + 2.15,
@@ -160,6 +219,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       );
 
       camera.lookAt(focus);
+      camera.rotateZ(jolt * 0.035);
 
       updateSmoke(
         !popped && performer?.role === 'smoker' ? performer : undefined,

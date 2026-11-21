@@ -2,6 +2,7 @@ import * as T from 'three';
 import type { Ride } from '../sim/ride.ts';
 import { POWERS } from '../sim/powers.ts';
 import { wrappedCandy } from './candy';
+import { riderFacing, riderSize } from './riders';
 import { buildGags, buildInstruments } from './gags';
 
 function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
@@ -12,7 +13,7 @@ function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
   return mesh;
 }
 
-export function buildRideObjects(scene: T.Scene) {
+export function buildRideObjects(scene: T.Object3D) {
   const tokens = Array.from({ length: 2 }, () => {
     const token = new T.Group();
     const jewel = part(token, new T.IcosahedronGeometry(0.13, 0), 0xffd061);
@@ -168,7 +169,15 @@ export function buildRideObjects(scene: T.Scene) {
     const elapsed = time - (ride.encounter?.began ?? 0);
     const variant = ride.encounter?.variant;
 
-    updateGags(act === 'prank' ? variant : undefined, actor?.x, actor?.z, elapsed);
+    updateGags(
+      act === 'prank' ? variant : undefined,
+      actor?.x,
+      actor?.z,
+      elapsed,
+      actor ? riderFacing(actor) : 0,
+      actor ? riderSize(actor.id) : 1,
+    );
+
     updateInstruments(act === 'musician' ? variant : undefined, actor?.x, actor?.z, elapsed);
     mic.visible = act === 'takes';
     stageMark.visible = !!actor;

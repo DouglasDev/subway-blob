@@ -17,14 +17,16 @@ import {
   ENCOUNTER_CYCLE,
   encounterSchedule,
   guestProximity,
+  hasGuest,
   seededRandom,
   squeezeTolerance,
 } from '../src/sim/encounters.ts';
 import type { Encounter } from '../src/sim/encounters.ts';
 import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
 import { Fluid } from '../src/sim/fluid.ts';
+import { SPREADER_X, SPREADER_Z, sprayHits } from '../src/sim/hazards.ts';
 import { Grid } from '../src/sim/grid.ts';
-import { HOT_VOLUME, Ride, STANDARD_VOLUME, STEP } from '../src/sim/ride.ts';
+import { HOT_VOLUME, QUIET_SECONDS, Ride, STANDARD_VOLUME, STEP } from '../src/sim/ride.ts';
 
 function assertVolume(fluid: Fluid, mask: Uint8Array) {
   const occupied = new Set(fluid.cells);
@@ -351,16 +353,17 @@ test('dialogue plays slowly and does not repeat over thirty stops', () => {
   assert.ok(conversations >= 4);
 });
 
-test('the moves, songs, and pranks rotate through all five choices before repeating', () => {
+test('moves, songs, and pranks use every variant before repeating', () => {
   const content = guestContent(seededRandom(22));
 
-  assert.equal(PRANKS.length, 5);
+  assert.equal(PRANKS.length, 6);
 
   for (const kind of ['acrobat', 'musician', 'prank'] as const) {
-    const first = Array.from({ length: 5 }, () => content.variant(kind));
+    const length = kind === 'prank' ? PRANKS.length : 5;
+    const first = Array.from({ length }, () => content.variant(kind));
 
-    assert.equal(new Set(first).size, 5);
-    assert.notEqual(content.variant(kind), first[4]);
+    assert.equal(new Set(first).size, length);
+    assert.notEqual(content.variant(kind), first.at(-1));
   }
 });
 
@@ -393,13 +396,13 @@ test('guest proximity drains tolerance, while Cool Pack heals and Quiet Bubble p
   ride.tick({ x: 0, z: 0 });
   const activatedAt = ride.time;
 
-  assert.ok(Math.abs(ride.shieldUntil - activatedAt - 7.44) < 1e-9);
+  assert.ok(Math.abs(ride.shieldUntil - activatedAt - QUIET_SECONDS) < 1e-9);
 
-  for (let i = 0; i < 148; i++) ride.tick({ x: 0, z: 0 });
+  for (let i = 0; i < Math.round(QUIET_SECONDS / STEP) - 1; i++) ride.tick({ x: 0, z: 0 });
 
   assert.ok(ride.time < ride.shieldUntil);
   ride.tick({ x: 0, z: 0 });
-  assert.ok(ride.time >= ride.shieldUntil);
+  assert.ok(ride.time + 1e-9 >= ride.shieldUntil);
   assert.deepEqual(ride.inventory, [null, null]);
 });
 
@@ -411,7 +414,8 @@ test('a weighted deck favors both gross powers and includes every new pickup', (
   assert.equal(all.filter((power) => power === 'crazy').length, 1);
   assert.equal(all.filter((power) => power === 'fart').length, 3);
   assert.equal(all.filter((power) => power === 'vomit').length, 3);
-  assert.equal(new Set(all).size, 9);
+  assert.equal(all.filter((power) => power === 'shield').length, 1);
+  assert.equal(new Set(all).size, Object.keys(POWERS).length);
 
   for (let index = 0; index < 120; index++) {
     const first = draw();
@@ -648,14 +652,14 @@ test('each encounter cues one rider reaction two seconds after it starts in the 
     for (let tick = 0; tick < 155; tick++) {
       ride.tick({ x: 0, z: 0 });
 
-      if (ride.encounter?.kind === kind && (kind === 'ac' || ride.act?.role === kind))
+      if (ride.encounter?.kind === kind && (!hasGuest(kind) || ride.act?.role === kind))
         startedAt ??= ride.time;
 
       for (const cue of ride.cues.splice(0)) {
         if (cue !== kind) continue;
 
         assert.equal(ride.encounter?.kind, kind);
-        if (kind !== 'ac') assert.equal(ride.act?.role, kind);
+        if (hasGuest(kind)) assert.equal(ride.act?.role, kind);
         reactions.push(ride.time);
       }
     }
@@ -664,4 +668,123 @@ test('each encounter cues one rider reaction two seconds after it starts in the 
     assert.equal(reactions.length, 1, kind);
     assert.ok(Math.abs(reactions[0] - startedAt! - 2) < 1e-8, kind);
   }
+});
+
+test('Super Fluid reaches farther through a one-cell passage at the same volume', () => {
+  const grid = new Grid(10, 3, 3);
+  const fluid = new Fluid(grid, 4, -0.3, 0);
+  const line = Array.from({ length: 9 }, (_, x) => grid.index(x, 1, 1));
+  const mask = maskWith(grid, line.slice(3));
+
+  assert.ok(fluid.step(maskWith(grid, line.slice(0, 4))));
+  assert.equal(fluid.step(mask), false);
+  assert.ok(fluid.step(mask, 0, 0, 4, 0, true));
+  assertVolume(fluid, mask);
+
+  const ride = new Ride();
+
+  ride.start();
+  ride.inventory[0] = 'fluid';
+  ride.usePower(0);
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.fluidUntil - ride.time, 10);
+  assert.ok(ride.cues.includes('fluid'));
+  assertVolume(ride.fluid, ride.mask);
+});
+
+test('Slime Spray only hits the cone in front of the blob', () => {
+  assert.ok(sprayHits(1, 0.2, Math.PI / 2));
+  assert.ok(!sprayHits(-1, 0.2, Math.PI / 2));
+  assert.ok(!sprayHits(0.2, 1, Math.PI / 2));
+
+  const ride = new Ride();
+  const [front, rear] = ride.crowd.riders;
+
+  Object.assign(front, { x: -0.6, z: 0, role: undefined });
+  Object.assign(rear, { x: 0.6, z: 0, role: undefined });
+  ride.crowd.riders = [front, rear];
+
+  ride.crowd.react('vomit', { x: 0, z: 0 }, 1, false, -Math.PI / 2);
+  assert.equal(front.wantsExit, true);
+  assert.equal(rear.wantsExit, undefined);
+});
+
+test('sticky soda slows steering and chips away at the Squished meter', () => {
+  const normal = new Ride();
+  const sticky = new Ride();
+
+  for (const ride of [normal, sticky]) {
+    ride.crowd.riders = [];
+    ride.start();
+  }
+
+  sticky.encounter = {
+    kind: 'soda',
+    expires: 1,
+    began: 0,
+    variant: 0,
+    dialogueAt: 0,
+    location: { x: 0, z: 0 },
+  };
+
+  for (let tick = 0; tick < 5; tick++) {
+    normal.tick({ x: 1, z: 0 });
+    sticky.tick({ x: 1, z: 0 });
+  }
+
+  assert.equal(sticky.sticky, true);
+  assert.ok(sticky.fluid.x < normal.fluid.x * 0.75);
+  assert.ok(sticky.tolerance < normal.tolerance);
+  assertVolume(sticky.fluid, sticky.mask);
+});
+
+test('a shover pushes the blob away and seated legs occupy the aisle', () => {
+  const ride = new Ride();
+  const rider = ride.crowd.riders[0];
+  const before = ride.fluid.x;
+
+  ride.crowd.riders = [rider];
+  ride.start();
+  ride.encounter = { kind: 'shover', expires: 1, began: 0, variant: 0, dialogueAt: 0 };
+  Object.assign(rider, { x: 0.54, z: 0, role: 'shover', slot: { ...rider.slot, x: 0.54, z: 0 } });
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(ride.cues.includes('shove'));
+  assert.ok(ride.fluid.x < before);
+  assertVolume(ride.fluid, ride.mask);
+
+  Object.assign(rider, { x: SPREADER_X, z: SPREADER_Z, role: 'spreader' });
+  const mask = ride.car.fixtures.slice();
+
+  ride.crowd.occupy(ride.car.grid, mask, 0);
+
+  for (const side of [-1, 1]) {
+    const knee = ride.car.grid.at(SPREADER_X + side * 0.48, 0.49, SPREADER_Z + 0.55);
+
+    assert.equal(ride.car.fixtures[knee], 0);
+    assert.equal(mask[knee], 1);
+  }
+});
+
+test('station braking jolts on arrival after 6.5 seconds in motion', () => {
+  const ride = new Ride();
+
+  ride.schedule.clear();
+  ride.start();
+  let departedAt = 0;
+
+  for (let step = 0; step < 410; step++) {
+    ride.tick({ x: 0, z: 0 });
+
+    if (ride.phase === 'running' && !departedAt) departedAt = ride.time;
+    if (ride.stop !== 1) continue;
+
+    assert.equal(ride.phase, 'arriving');
+    assert.ok(Math.abs(ride.time - departedAt - 6.5) <= STEP + 1e-8);
+    assert.equal(ride.jolt?.at, ride.time);
+    assert.ok(ride.cues.includes('brakeJolt'));
+
+    return;
+  }
+
+  assert.fail('Train never reached the second station');
 });

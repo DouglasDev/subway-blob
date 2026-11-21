@@ -7,8 +7,9 @@ const catalog = {
   annoy: { name: 'Annoying Alarm', color: 0xff8a55, weight: 2 },
   candy: { name: 'Sell Candy', color: 0xff81ae, weight: 2 },
   cool: { name: 'Cool Pack', color: 0x8de8ff, weight: 2 },
-  shield: { name: 'Quiet Bubble', color: 0x70a8ff, weight: 3 },
+  shield: { name: 'Quiet Bubble', color: 0x70a8ff, weight: 1 },
   express: { name: 'Speed Boost', color: 0xffdc73, weight: 2 },
+  fluid: { name: 'Super Fluid', color: 0x7affdf, weight: 2 },
   fan: { name: 'Pocket Fan', color: 0x72e6c6, weight: 2 },
 } as const;
 
@@ -21,6 +22,8 @@ export const DOUBLE_PICKUP_STOP = 7;
 export const COOL_POINTS = 25;
 
 export const EXPRESS_SECONDS = 10;
+
+export const SUPER_FLUID_SECONDS = 10;
 
 export const CANDY_SECONDS = 10;
 

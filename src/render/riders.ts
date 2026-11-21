@@ -2,7 +2,7 @@ import * as T from 'three';
 import type { Rider } from '../sim/crowd.ts';
 import { garment, riderStyle, shirts } from './wardrobe';
 
-type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role'>;
+type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role' | 'trajectory'>;
 
 const skins = [0xdfa982, 0x8e5040, 0xb87752, 0x58362b, 0xe8ba98, 0xa66b52];
 
@@ -66,7 +66,11 @@ export function buildRiders(scene: T.Object3D) {
     mesh.setColorAt(index, color.setHex(tint));
   }
 
-  return (riders: Figure[], acrobat?: { id: number; move: number; age: number }) => {
+  return (
+    riders: Figure[],
+    acrobat?: { id: number; move: number; age: number },
+    shove?: { id: number; age: number; heading: number },
+  ) => {
     const counts = new Uint16Array(torso.length);
     let hairCount = 0;
     let legCount = 0;
@@ -80,7 +84,8 @@ export function buildRiders(scene: T.Object3D) {
       const jacket = shirts[kind];
       const skin = skins[(id * 5 + 3) % skins.length];
       const dress = style.cut >= 8;
-      const skirt = style.cut >= 6;
+      const seated = role === 'spreader' && !rider.trajectory;
+      const skirt = !seated && style.cut >= 6;
       const long = style.cut % 2 === 0;
       const shorts = style.cut === 5;
       const swing = stride ? Math.sin(stride) * 0.47 : 0;
@@ -89,6 +94,17 @@ export function buildRiders(scene: T.Object3D) {
       person.rotation.y = riderFacing(rider);
       person.rotation.x = 0;
       person.rotation.z = 0;
+      const pushing = shove?.id === id ? Math.max(0, 1 - shove.age / 0.42) : 0;
+
+      if (seated) {
+        person.position.y = -0.25;
+        person.rotation.y = 0;
+      }
+
+      if (pushing && shove) {
+        person.rotation.y = shove.heading;
+        person.rotation.x = pushing * 0.16;
+      }
 
       if (acrobat?.id === id && !stride) {
         const beat = acrobat.age * 4.6;
@@ -158,17 +174,27 @@ export function buildRiders(scene: T.Object3D) {
         const angle = sign * swing;
         const cuff = style.cut % 3 === 0 ? 0.159 : 0.119;
 
+        if (seated) {
+          stamp(arms, limb, jacket, sign * 0.245, 0.94, 0.15, 0.104, 0.32, 0.113, -0.58);
+          stamp(legs, legCount++, style.bottom, sign * 0.27, 0.78, 0.25, 0.49, 0.25, 0.35, 0.04);
+          stamp(legs, legCount++, style.bottom, sign * 0.48, 0.48, 0.55, 0.25, 0.51, 0.25, -0.13);
+          stamp(shoes, foot, style.sneaker, sign * 0.48, 0.33, 0.66, 0.25, 0.16, 0.34);
+          stamp(shoes, foot + 1, 0xe5e0d3, sign * 0.48, 0.26, 0.66, 0.26, 0.045, 0.35);
+
+          continue;
+        }
+
         stamp(
           arms,
           limb,
           jacket,
           sign * 0.231,
-          1.04,
-          -sign * swing * 0.1,
+          1.04 + pushing * 0.15,
+          -sign * swing * 0.1 + pushing * 0.25,
           0.092,
           0.51,
           0.11,
-          -angle,
+          -angle - pushing * 1.4,
         );
 
         stamp(

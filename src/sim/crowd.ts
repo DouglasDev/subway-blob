@@ -1,6 +1,7 @@
 import { CROSS_DEPTH, CROSS_SEATS, CROSS_WIDTH, DOORS, HEIGHT_LIMIT } from './car.ts';
 import { Grid } from './grid.ts';
-import { seededRandom } from './encounters.ts';
+import { RHINO_PRANK, SPREADER_X, SPREADER_Z, sprayHits } from './hazards.ts';
+import { hasGuest, seededRandom } from './encounters.ts';
 import type { Encounter } from './encounters.ts';
 import { candyLocation, CANDY_SECONDS } from './powers.ts';
 import type { Power } from './powers.ts';
@@ -103,9 +104,23 @@ export class Crowd {
         exits: false,
       };
 
-      if (index === 0 && encounter && encounter !== 'ac') {
-        const x = encounter === 'acrobat' ? 1.7 : encounter === 'prank' ? -0.38 : 0.03;
-        const z = encounter === 'acrobat' ? 0.13 : encounter === 'prank' ? 0.39 : 0.42;
+      if (index === 0 && encounter && hasGuest(encounter)) {
+        const x =
+          encounter === 'spreader'
+            ? SPREADER_X
+            : encounter === 'acrobat'
+              ? 1.7
+              : encounter === 'prank'
+                ? -0.38
+                : 0.03;
+        const z =
+          encounter === 'spreader'
+            ? SPREADER_Z
+            : encounter === 'acrobat'
+              ? 0.13
+              : encounter === 'prank'
+                ? 0.39
+                : 0.42;
 
         rider.role = encounter;
         rider.prop = undefined;
@@ -162,12 +177,13 @@ export class Crowd {
   }
 
   react(
-    power: Exclude<Power, 'cool' | 'shield' | 'express'>,
+    power: Exclude<Power, 'cool' | 'shield' | 'express' | 'fluid'>,
     from: Location,
     time: number,
     doors: boolean,
+    facing = 0,
   ) {
-    const radius = { crazy: 2.35, fart: 2, vomit: 1.46, annoy: 2.6, candy: 2.65, fan: 1.3 }[power];
+    const radius = { crazy: 2.35, fart: 2, vomit: 1.95, annoy: 2.6, candy: 2.65, fan: 1.3 }[power];
     const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, candy: 0, fan: 0 }[power];
     const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: CANDY_SECONDS, fan: 7 }[power];
 
@@ -175,7 +191,12 @@ export class Crowd {
 
     const nearby = this.riders
       .filter(
-        (rider) => !rider.role && !rider.trajectory && !rider.wantsExit && distance(rider) < radius,
+        (rider) =>
+          !rider.role &&
+          !rider.trajectory &&
+          !rider.wantsExit &&
+          distance(rider) < radius &&
+          (power !== 'vomit' || sprayHits(rider.x - from.x, rider.z - from.z, facing)),
       )
       .sort((a, b) => distance(a) - distance(b));
     const candy = candyLocation(from.x);
@@ -248,12 +269,34 @@ export class Crowd {
     prop.pushed = true;
   }
 
-  update(dt: number, time: number, blob: Location, grid: Grid, fixtures: Uint8Array) {
+  update(
+    dt: number,
+    time: number,
+    blob: Location,
+    grid: Grid,
+    fixtures: Uint8Array,
+    prankVariant?: number,
+  ) {
     const performer = this.performer;
     const performance =
       performer &&
       performer.z > -1.02 &&
       (performer.role === 'acrobat' || performer.role === 'musician' || performer.role === 'prank');
+
+    if (performance && performer.role === 'prank' && prankVariant === RHINO_PRANK) {
+      for (const rider of this.riders) {
+        const dx = rider.x - performer.x;
+        const dz = rider.z - performer.z;
+
+        if (rider.role || rider.trajectory || Math.hypot(dx, dz) > 0.58) continue;
+
+        rider.away = {
+          x: rider.x + (Math.sign(dx) || 1) * 0.68,
+          z: rider.z - 0.36,
+          until: time + 0.65,
+        };
+      }
+    }
 
     for (const rider of this.riders) {
       const { trajectory: path, prop } = rider;
@@ -274,11 +317,15 @@ export class Crowd {
               z: blob.z + ((rider.z - blob.z) / distance) * 0.7,
             };
           else target = rider;
+        } else if (rider === performer && rider.role === 'prank' && prankVariant === RHINO_PRANK) {
+          target = { x: rider.slot.x + Math.sin(time * 2.8) * 1.42, z: 0.42 };
         } else if (prop?.pushed) {
           target = { x: prop.x - (prop.kind === 'bike' ? 0.53 : 0.31), z: prop.z };
         } else if (performance && !rider.role && Math.abs(rider.slot.x - performer.x) < 2.3) {
           target = {
-            x: rider.slot.x + Math.sign(rider.slot.x - performer.x) * 0.38,
+            x:
+              rider.slot.x +
+              Math.sign(rider.slot.x - performer.x) * (prankVariant === RHINO_PRANK ? 0.75 : 0.38),
             z: -0.67 + rider.slot.z * 0.2,
           };
         }
@@ -419,8 +466,30 @@ export class Crowd {
     const shoulderX = 0.16 + 0.09 * packed;
     const shoulderZ = 0.23 + 0.02 * packed;
 
-    for (const { x, z, prop } of this.riders) {
+    for (const { x, z, prop, role, trajectory } of this.riders) {
       if (z < -1.46) continue;
+
+      if (role === 'spreader' && !trajectory) {
+        grid.block(
+          mask,
+          { x: x - 0.23, y: 0.47, z: z - 0.13 },
+          { x: x + 0.23, y: 1.38, z: z + 0.22 },
+        );
+
+        for (const side of [-1, 1]) {
+          const knee = x + side * 0.48;
+
+          grid.block(
+            mask,
+            { x: knee - 0.18, y: 0, z: z + 0.25 },
+            { x: knee + 0.18, y: 0.61, z: z + 0.78 },
+          );
+        }
+
+        grid.block(mask, { x: x - 0.47, y: 0.38, z }, { x: x + 0.47, y: 0.59, z: z + 0.48 });
+
+        continue;
+      }
 
       if (prop) {
         const length = prop.kind === 'bike' ? 0.36 : 0.13;

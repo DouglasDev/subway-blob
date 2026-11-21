@@ -21,3 +21,5 @@ Each encounter plays a one-shot vocal reaction from a nearby rider two seconds a
 | SubwayTakes      | [disgust.wav by Reitanna](https://freesound.org/people/Reitanna/sounds/344036/)                          | 0.02–2.36 s    |
 | Weird rider      | [ugh (male) by brookmorgan](https://freesound.org/people/brookmorgan/sounds/189565/)                     | 0.22–0.91 s    |
 | Broken AC        | [Man sighs in frustration.m4a by sandralaughs](https://freesound.org/people/sandralaughs/sounds/519201/) | 0.58–2.49 s    |
+
+The disruptive loudspeaker reuses the recorded door announcement with a narrow band-pass, distortion, and two short echoes. Train jolts, sticky soda, the shove, rhino bumps, Super Fluid, and the expanded pop are synthesized in the game. Background rider reactions reuse the credited recordings at lower volume.

@@ -94,7 +94,7 @@ function label(
   return mesh;
 }
 
-export function buildCar(scene: T.Scene) {
+export function buildCar(scene: T.Object3D) {
   const car = new T.Group();
   const back = -CAR_WIDTH / 2;
   const leaves: { mesh: T.Group; x: number; sign: number }[] = [];

@@ -52,7 +52,14 @@ export class Fluid {
     this.visited = new Uint8Array(grid.size);
   }
 
-  step(blocked: Uint8Array, dx = 0, dz = 0, targetVolume = this.volume, facing = 0) {
+  step(
+    blocked: Uint8Array,
+    dx = 0,
+    dz = 0,
+    targetVolume = this.volume,
+    facing = 0,
+    superFluid = false,
+  ) {
     const previous = this.cells;
     const { grid, queue, reach, ranks, visited } = this;
     const x = this.x + dx;
@@ -61,6 +68,7 @@ export class Fluid {
     queue.length = 0;
     reach.fill(0);
     visited.fill(0);
+    const flowLayers = this.flowLayers + (superFluid ? 3 : 0);
 
     if (previous.length === 0) {
       for (let id = 0; id < grid.size; id++) {
@@ -77,7 +85,7 @@ export class Fluid {
       for (let index = 0; index < queue.length; index++) {
         const id = queue[index];
 
-        if (reach[id] > this.flowLayers) continue;
+        if (reach[id] > flowLayers) continue;
 
         for (let side = 0; side < 6; side++) {
           const neighbor = grid.neighbors[id * 6 + side];
@@ -99,13 +107,10 @@ export class Fluid {
       const offset = id * 3;
       const localX = grid.centers[offset] - x;
       const localZ = grid.centers[offset + 2] - z;
-      const rank = bodyDistance(
-        localX * cos - localZ * sin,
-        grid.centers[offset + 1],
-        localX * sin + localZ * cos,
-      );
+      const y = grid.centers[offset + 1];
+      const rank = bodyDistance(localX * cos - localZ * sin, y, localX * sin + localZ * cos);
 
-      ranks[id] = rank;
+      ranks[id] = superFluid ? rank * 0.5 + (localX ** 2 + localZ ** 2 + y * 0.27) * 0.19 : rank;
 
       if (rank <= 0.035) comfortable++;
     }
@@ -113,7 +118,7 @@ export class Fluid {
     candidates.sort((a, b) => ranks[a] - ranks[b] || a - b);
     const chosen = this.findPlacement(candidates, targetVolume);
 
-    this.pressure = 1 - Math.min(comfortable / targetVolume, 1);
+    this.pressure = (1 - Math.min(comfortable / targetVolume, 1)) * (superFluid ? 0.72 : 1);
 
     if (!chosen) return false;
 

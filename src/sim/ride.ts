@@ -6,10 +6,19 @@ import {
   ENCOUNTER_CYCLE,
   encounterSchedule,
   guestProximity,
+  hasGuest,
   seededRandom,
   squeezeTolerance,
 } from './encounters.ts';
 import type { Cue, Encounter } from './encounters.ts';
+import {
+  RHINO_PRANK,
+  SHOVE_DURATION,
+  SHOVE_RANGE,
+  SODA_DRAIN,
+  SODA_RADIUS,
+  SODA_SPEED,
+} from './hazards.ts';
 import { Fluid } from './fluid.ts';
 import { guestContent } from './guestContent.ts';
 import {
@@ -20,6 +29,7 @@ import {
   DOUBLE_PICKUP_STOP,
   EXPRESS_SECONDS,
   powerDeck,
+  SUPER_FLUID_SECONDS,
 } from './powers.ts';
 import type { Power } from './powers.ts';
 import { stationIndex, travelDirection } from './route.ts';
@@ -30,11 +40,13 @@ export const STANDARD_VOLUME = 245;
 
 export const HOT_VOLUME = 306;
 
-const TRAVEL = 4.5;
+const TRAVEL = 6.5;
 const ARRIVAL = 0.48;
-const DWELL = 6.3;
+const DWELL = 5.3;
 const CLOSING = 3.6;
-const QUIET_SECONDS = (ARRIVAL + DWELL + CLOSING + TRAVEL) / 2;
+
+export const QUIET_SECONDS = 6.2;
+
 const TURN_RATE = 11;
 const REACTION_DELAY = 2;
 
@@ -62,10 +74,12 @@ export class Ride {
     variant: number;
     dialogueAt: number;
     reactionAt?: number | null;
+    location?: Location;
     line?: string;
     exchange?: { take: string; verdict: string; beat: 'question' | 'take' | 'verdict' };
   } | null = null;
-  animation: { cue: Power; began: number; until: number } | null = null;
+  animation: { cue: Power; began: number; until: number; facing: number; origin: Location } | null =
+    null;
   phase: Phase = 'ready';
   stop = 0;
   score = 0;
@@ -81,6 +95,14 @@ export class Ride {
   facing = 0;
   private steeringHeading = 0;
   fanUntil = 0;
+  fluidUntil = 0;
+  sticky = false;
+  jolt: { at: number; strength: number } | null = null;
+  shove: { x: number; z: number; at: number } | null = null;
+  private nextTrackJolt = Infinity;
+  private nextMurmur = 5;
+  private nextRhinoBump = 0;
+  private readonly ambience: () => number;
   private rawSqueeze = 0;
   private readonly random: () => number;
   private readonly guestRandom: () => number;
@@ -93,6 +115,7 @@ export class Ride {
   private accumulator = 0;
 
   constructor(readonly seed = 12071) {
+    this.ambience = seededRandom(seed ^ 0x26618293);
     this.random = seededRandom(seed ^ 0x6c8e9cf5);
     this.guestRandom = seededRandom(seed ^ 0x32c47ae1);
     this.verdictRandom = seededRandom(seed ^ 0xe96da48f);
@@ -132,7 +155,7 @@ export class Ride {
 
     this.guestPressure = 0;
 
-    if (!encounter || (!act && encounter.kind !== 'ac')) return;
+    if (!encounter || (!act && hasGuest(encounter.kind))) return;
 
     if (encounter.reactionAt === undefined) encounter.reactionAt = this.time + REACTION_DELAY;
 
@@ -141,7 +164,17 @@ export class Ride {
       this.cues.push(encounter.kind);
     }
 
-    if (!act) return;
+    if (!act) {
+      if (encounter.kind === 'speaker' && encounter.location && this.time >= this.shieldUntil) {
+        const age = this.time - encounter.began - REACTION_DELAY;
+        const distance = Math.abs(this.fluid.x - encounter.location.x);
+
+        if (age >= 0 && age < 3.2)
+          this.guestPressure = 0.27 + Math.max(0, 1 - distance / 3.4) * 0.44;
+      }
+
+      return;
+    }
 
     const { centers } = this.car.grid;
     let closest = Infinity;
@@ -229,8 +262,14 @@ export class Ride {
     this.phaseTime += STEP;
     this.moveTrain();
     this.activatePowers();
+    const encounter = this.encounter;
+    const soda = encounter?.kind === 'soda' ? encounter.location : undefined;
+
+    this.sticky = !!soda && Math.hypot(this.fluid.x - soda.x, this.fluid.z - soda.z) < SODA_RADIUS;
+    this.updateShove();
+    const impulse = this.shove ? Math.max(0, 1 - (this.time - this.shove.at) / SHOVE_DURATION) : 0;
     const speed =
-      (STEP * (this.time < this.expressUntil ? 2.28 : 1.48)) /
+      (STEP * (this.time < this.expressUntil ? 2.28 : 1.48) * (this.sticky ? SODA_SPEED : 1)) /
       Math.max(1, Math.hypot(input.x, input.z));
     const dx = Math.max(-4.62, Math.min(4.62, this.fluid.x + input.x * speed)) - this.fluid.x;
     const dz = Math.max(-1.04, Math.min(1.04, this.fluid.z + input.z * speed)) - this.fluid.z;
@@ -246,7 +285,11 @@ export class Ride {
         ? this.steeringHeading
         : this.facing + Math.sign(shortestTurn) * maxTurn;
 
-    this.solveCrowd(dx, dz);
+    this.solveCrowd(
+      dx + (this.shove?.x ?? 0) * impulse * STEP * 3.4,
+      dz + (this.shove?.z ?? 0) * impulse * STEP * 3.4,
+    );
+
     const quiet = this.time < this.shieldUntil;
     const fanned = this.time < this.fanUntil;
     const pressure = crowdPressure(this.stop, this.rawSqueeze, this.crowd.congestion(this.fluid));
@@ -256,13 +299,17 @@ export class Ride {
 
     this.updateGuest();
 
-    this.tolerance = squeezeTolerance(
+    const nextTolerance = squeezeTolerance(
       this.tolerance,
       quiet ? Math.min(this.squeeze, load) : this.rawSqueeze === 1 ? pressure : this.squeeze,
       STEP,
       !quiet && !fanned && this.encounter?.kind === 'smoker',
       this.guestPressure,
     );
+
+    this.tolerance = this.sticky
+      ? Math.max(0, Math.min(nextTolerance, this.tolerance) - SODA_DRAIN * STEP)
+      : nextTolerance;
 
     if (this.tolerance <= 1e-9) {
       this.tolerance = 0;
@@ -273,6 +320,22 @@ export class Ride {
     }
 
     this.updatePickup();
+
+    if (this.time >= this.nextMurmur) {
+      this.nextMurmur = this.time + 4.5 + this.ambience() * 8;
+
+      if (this.crowd.onboard > 15) this.cues.push('murmur');
+    }
+
+    if (
+      encounter?.kind === 'prank' &&
+      encounter.variant === RHINO_PRANK &&
+      this.act &&
+      this.time >= this.nextRhinoBump
+    ) {
+      this.nextRhinoBump = this.time + 2.3;
+      this.cues.push('rhino');
+    }
 
     if (
       this.phase === 'doors' &&
@@ -290,6 +353,26 @@ export class Ride {
     }
   }
 
+  private updateShove() {
+    const shover = this.act;
+
+    if (shover?.role !== 'shover' || (this.shove && this.time - this.shove.at < 2.8)) return;
+
+    const x = this.fluid.x - shover.x;
+    const z = this.fluid.z - shover.z;
+    const distance = Math.hypot(x, z);
+
+    if (distance >= SHOVE_RANGE) return;
+
+    this.shove = {
+      x: distance > 0.001 ? x / distance : 1,
+      z: distance > 0.001 ? z / distance : 0,
+      at: this.time,
+    };
+
+    this.cues.push('shove');
+  }
+
   private solveCrowd(dx: number, dz: number) {
     const { grid, fixtures } = this.car;
     const saved = this.crowd.snapshot();
@@ -297,17 +380,28 @@ export class Ride {
       this.encounter?.kind === 'ac' && this.time >= this.fanUntil ? HOT_VOLUME : STANDARD_VOLUME;
 
     this.crowd.tryPush(this.fluid, dx, dz, grid, fixtures);
-    this.crowd.update(STEP, this.time, this.fluid, grid, fixtures);
+
+    this.crowd.update(
+      STEP,
+      this.time,
+      this.fluid,
+      grid,
+      fixtures,
+      this.encounter?.kind === 'prank' ? this.encounter.variant : undefined,
+    );
+
+    const superFluid = this.time < this.fluidUntil;
+
     this.proposedMask.set(fixtures);
     this.crowd.occupy(grid, this.proposedMask, this.stop);
 
-    if (this.fluid.step(this.proposedMask, dx, dz, target, this.facing)) {
+    if (this.fluid.step(this.proposedMask, dx, dz, target, this.facing, superFluid)) {
       this.mask.set(this.proposedMask);
       this.rawSqueeze = this.fluid.pressure;
     } else {
       if (
         target === this.fluid.volume ||
-        !this.fluid.step(this.proposedMask, dx, dz, this.fluid.volume, this.facing)
+        !this.fluid.step(this.proposedMask, dx, dz, this.fluid.volume, this.facing, superFluid)
       ) {
         this.crowd.yieldNear(saved, this.fluid);
         this.proposedMask.set(fixtures);
@@ -320,12 +414,21 @@ export class Ride {
             dz,
             Math.min(target, this.fluid.volume),
             this.facing,
+            superFluid,
           )
         ) {
           // The last mask and poses are valid even when a dense wave has to wait.
           this.crowd.riders = saved;
           this.proposedMask.set(this.mask);
-          this.fluid.step(this.mask, dx, dz, Math.min(target, this.fluid.volume), this.facing);
+
+          this.fluid.step(
+            this.mask,
+            dx,
+            dz,
+            Math.min(target, this.fluid.volume),
+            this.facing,
+            superFluid,
+          );
         }
       }
 
@@ -343,18 +446,27 @@ export class Ride {
       if (!power) continue;
 
       this.inventory[slot] = null;
-      this.animation = { cue: power, began: this.time, until: this.time + 2.5 };
+
+      this.animation = {
+        cue: power,
+        began: this.time,
+        until: this.time + 2.5,
+        facing: this.facing,
+        origin: { x: this.fluid.x, z: this.fluid.z },
+      };
+
       this.cues.push(power);
 
       if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + COOL_POINTS / 100);
       else if (power === 'shield') this.shieldUntil = this.time + QUIET_SECONDS;
+      else if (power === 'fluid') this.fluidUntil = this.time + SUPER_FLUID_SECONDS;
       else if (power === 'express') this.expressUntil = this.time + EXPRESS_SECONDS;
       else {
         if (power === 'candy')
           this.candy = { ...candyLocation(this.fluid.x), until: this.time + CANDY_SECONDS };
         if (power === 'fan') this.fanUntil = this.time + 14;
 
-        this.crowd.react(power, this.fluid, this.time, this.phase === 'doors');
+        this.crowd.react(power, this.fluid, this.time, this.phase === 'doors', this.facing);
       }
     }
 
@@ -446,7 +558,15 @@ export class Ride {
     if (this.phase === 'running') {
       this.travel = Math.min(1, this.phaseTime / TRAVEL);
 
+      if (this.phaseTime >= this.nextTrackJolt && this.phaseTime < TRAVEL - 0.7) {
+        this.nextTrackJolt = Infinity;
+        this.jolt = { at: this.time, strength: (this.ambience() < 0.5 ? -1 : 1) * 0.48 };
+        this.cues.push('trackJolt');
+      }
+
       if (this.travel === 1) {
+        this.jolt = { at: this.time, strength: 0.9 };
+        this.cues.push('brakeJolt');
         this.stop++;
         this.arrive();
       }
@@ -481,6 +601,12 @@ export class Ride {
               ? this.guests.variant(kind)
               : 0,
           dialogueAt: this.time,
+          location:
+            kind === 'speaker'
+              ? { x: -3.75 + this.ambience() * 7.5, z: -0.99 }
+              : kind === 'soda'
+                ? { x: (this.ambience() < 0.5 ? -1 : 1) * (0.66 + 0.77 * this.ambience()), z: 0.18 }
+                : undefined,
         };
 
         this.waitingEncounter = undefined;
@@ -502,5 +628,8 @@ export class Ride {
   private setPhase(phase: Phase) {
     this.phase = phase;
     this.phaseTime = 0;
+
+    if (phase === 'running')
+      this.nextTrackJolt = this.ambience() < 0.57 ? 1.1 + this.ambience() * 3.6 : Infinity;
   }
 }

@@ -4,6 +4,7 @@ import type { Cue, Encounter } from './sim/encounters.ts';
 const music = {
   roll: new URL('./assets/rolling.mp3', import.meta.url).href,
   announcement: new URL('./assets/announcement.mp3', import.meta.url).href,
+  loudspeaker: new URL('./assets/muffled-pa.mp3', import.meta.url).href,
   chime: new URL('./assets/chime.mp3', import.meta.url).href,
 };
 
@@ -19,7 +20,7 @@ const performances = {
   prank: new URL('./assets/pigeon.mp3', import.meta.url).href,
 };
 
-const reactions: Record<Encounter, string> = {
+const reactions: Partial<Record<Encounter, string>> = {
   acrobat: new URL('./assets/reaction-acrobat.mp3', import.meta.url).href,
   musician: new URL('./assets/reaction-musician.mp3', import.meta.url).href,
   prank: new URL('./assets/reaction-prank.mp3', import.meta.url).href,
@@ -27,6 +28,9 @@ const reactions: Record<Encounter, string> = {
   takes: new URL('./assets/reaction-takes.mp3', import.meta.url).href,
   weird: new URL('./assets/reaction-weird.mp3', import.meta.url).href,
   ac: new URL('./assets/reaction-ac.mp3', import.meta.url).href,
+  shover: new URL('./assets/reaction-prank.mp3', import.meta.url).href,
+  spreader: new URL('./assets/reaction-weird.mp3', import.meta.url).href,
+  speaker: music.loudspeaker,
 };
 
 function isEncounter(cue: Cue): cue is Encounter {
@@ -77,7 +81,37 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
     { at: 0, length: 0.8, pitch: 342, end: 211 },
     { at: 0.12, length: 0.6, pitch: 675, end: 520 },
   ],
-  pop: [{ at: 0, length: 0.24, pitch: 325, end: 48, shape: 'triangle' }],
+  fluid: [
+    { at: 0, length: 0.28, pitch: 330, end: 990 },
+    { at: 0.22, length: 0.6, pitch: 790, end: 270 },
+  ],
+  soda: [
+    { at: 0, length: 0.15, pitch: 1100, end: 450 },
+    { at: 0.11, length: 0.43, pitch: 460, end: 140 },
+  ],
+  trackJolt: [{ at: 0, length: 0.22, pitch: 135, end: 37 }],
+  brakeJolt: [
+    { at: 0, length: 0.42, pitch: 152, end: 31 },
+    { at: 0.06, length: 0.28, pitch: 720, end: 160 },
+  ],
+  shove: [{ at: 0, length: 0.2, pitch: 205, end: 75 }],
+  rhino: [
+    { at: 0, length: 0.32, pitch: 118, end: 62, shape: 'sawtooth' },
+    { at: 0.19, length: 0.27, pitch: 112, end: 48 },
+  ],
+  pop: [
+    { at: 0, length: 0.41, pitch: 390, end: 34, shape: 'triangle' },
+    { at: 0.025, length: 0.5, pitch: 119, end: 38 },
+  ],
+};
+
+const impacts: Partial<Record<Cue, readonly [number, number, number]>> = {
+  pop: [0.49, 1450, 0.37],
+  trackJolt: [0.19, 610, 0.16],
+  brakeJolt: [0.41, 920, 0.24],
+  soda: [0.26, 3250, 0.11],
+  shove: [0.16, 860, 0.21],
+  rhino: [0.24, 410, 0.16],
 };
 
 export class RideAudio {
@@ -90,8 +124,18 @@ export class RideAudio {
     prank: clip(performances.prank, 0.61, true),
   };
   private readonly guestReactions = new Map(
-    (Object.keys(reactions) as Encounter[]).map((kind) => [kind, clip(reactions[kind], 0.82)]),
+    (Object.entries(reactions) as [Encounter, string][]).map(([kind, url]) => [
+      kind,
+      clip(url, kind === 'speaker' ? 1 : 0.82),
+    ]),
   );
+  private readonly murmurs = [
+    reactions.acrobat!,
+    reactions.takes!,
+    reactions.weird!,
+    reactions.ac!,
+  ].map((url) => clip(url, 0.31));
+  private murmurIndex = -1;
   private readonly effects = {
     crazy: clip(powerEffects.crazy, 0.75),
     fart: clip(powerEffects.fart, 0.91),
@@ -105,10 +149,12 @@ export class RideAudio {
     ...this.performanceClips.musician,
     this.performanceClips.prank,
     ...this.guestReactions.values(),
+    ...this.murmurs,
     ...Object.values(this.effects),
   ];
   private context?: AudioContext;
   private bus?: GainNode;
+  private speakerPan?: StereoPannerNode;
   private allowed = false;
   private muted = false;
   private rolling = false;
@@ -124,6 +170,13 @@ export class RideAudio {
         this.bus = this.context.createGain();
         this.bus.connect(this.context.destination);
         this.bus.gain.value = this.muted ? 0 : 1;
+        const speaker = this.guestReactions.get('speaker');
+
+        if (speaker && typeof this.context.createStereoPanner === 'function') {
+          this.speakerPan = this.context.createStereoPanner();
+          this.speakerPan.connect(this.bus);
+          this.context.createMediaElementSource(speaker).connect(this.speakerPan);
+        }
       }
 
       void this.context.resume().catch(() => {});
@@ -179,15 +232,33 @@ export class RideAudio {
     if (active && this.allowed) this.play(active);
   }
 
-  cue(cue: Cue) {
+  cue(cue: Cue, pan = 0) {
     if (cue === 'pop') this.activeReaction?.pause();
     if (!this.allowed || this.muted) return;
 
-    if (isEncounter(cue)) {
-      this.activeReaction?.pause();
-      this.activeReaction = this.guestReactions.get(cue);
+    const reaction = isEncounter(cue) ? this.guestReactions.get(cue) : undefined;
 
-      if (this.activeReaction) this.play(this.activeReaction);
+    if (reaction) {
+      if (cue === 'speaker' && this.speakerPan && this.context)
+        this.speakerPan.pan.setValueAtTime(
+          Math.max(-1, Math.min(1, pan)),
+          this.context.currentTime,
+        );
+      this.activeReaction?.pause();
+      this.activeReaction = reaction;
+      this.play(reaction);
+
+      return;
+    }
+
+    if (cue === 'murmur') {
+      if (this.activeReaction && !this.activeReaction.paused && !this.activeReaction.ended) return;
+
+      this.murmurIndex =
+        (this.murmurIndex + 1 + Math.floor(Math.random() * (this.murmurs.length - 1))) %
+        this.murmurs.length;
+
+      this.play(this.murmurs[this.murmurIndex]);
 
       return;
     }
@@ -206,6 +277,10 @@ export class RideAudio {
 
     if (!this.context || this.context.state !== 'running' || !this.bus) return;
 
+    const impact = impacts[cue];
+
+    if (impact) this.impact(...impact);
+
     for (const note of sounds[cue] ?? []) {
       const start = this.context.currentTime + note.at;
       const end = start + note.length;
@@ -223,6 +298,31 @@ export class RideAudio {
       oscillator.start(start);
       oscillator.stop(end + 0.01);
     }
+  }
+
+  private impact(duration: number, cutoff: number, level: number) {
+    const context = this.context!;
+    const start = context.currentTime;
+    const buffer = context.createBuffer(
+      1,
+      Math.ceil(context.sampleRate * duration),
+      context.sampleRate,
+    );
+    const samples = buffer.getChannelData(0);
+
+    for (let i = 0; i < samples.length; i++)
+      samples[i] = (Math.random() * 2 - 1) * (1 - i / samples.length) ** 1.8;
+
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+
+    filter.type = 'lowpass';
+    filter.frequency.value = cutoff;
+    gain.gain.value = level;
+    source.buffer = buffer;
+    source.connect(filter).connect(gain).connect(this.bus!);
+    source.start(start);
   }
 
   reset() {

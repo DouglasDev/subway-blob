@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { RHINO_PRANK } from '../sim/hazards.ts';
 
 function shape(parent: T.Object3D, geometry: T.BufferGeometry, color: number, x = 0, y = 0, z = 0) {
   const mesh = new T.Mesh(geometry, new T.MeshStandardMaterial({ color, roughness: 0.6 }));
@@ -9,7 +10,7 @@ function shape(parent: T.Object3D, geometry: T.BufferGeometry, color: number, x 
   return mesh;
 }
 
-export function buildGags(scene: T.Scene) {
+export function buildGags(scene: T.Object3D) {
   const pigeon = new T.Group();
 
   shape(pigeon, new T.SphereGeometry(0.24, 10, 7), 0xb4a4cb).scale.set(1.35, 0.9, 0.76);
@@ -68,11 +69,36 @@ export function buildGags(scene: T.Scene) {
 
     return horse;
   });
-  const gags = [pigeon, rocket, choir, fish, stampede];
+  const rhino = new T.Group();
+
+  shape(rhino, new T.SphereGeometry(0.28, 12, 9), 0x767f8a, 0, 1.47, 0.015);
+
+  shape(rhino, new T.SphereGeometry(0.2, 10, 8), 0x929eaa, 0, 1.38, 0.22).scale.set(
+    0.94,
+    0.59,
+    1.12,
+  );
+
+  shape(rhino, new T.BoxGeometry(0.44, 0.52, 0.33), 0x747e89, 0, 1.04, 0.022);
+  const horn = shape(rhino, new T.ConeGeometry(0.088, 0.33, 11), 0xf0e1bb, 0, 1.53, 0.36);
+
+  horn.rotation.x = 0.6;
+
+  for (const side of [-1, 1]) {
+    shape(rhino, new T.SphereGeometry(0.082, 8, 7), 0x7a8695, side * 0.19, 1.69, -0.1).scale.set(
+      0.63,
+      1.18,
+      0.58,
+    );
+
+    shape(rhino, new T.SphereGeometry(0.031, 8, 6), 0x101c21, side * 0.152, 1.5, 0.236);
+  }
+
+  const gags = [pigeon, rocket, choir, fish, stampede, rhino];
 
   scene.add(...gags);
 
-  return (variant: number | undefined, x = 0, z = 0, time = 0) => {
+  return (variant: number | undefined, x = 0, z = 0, time = 0, heading = 0, size = 1) => {
     for (const [index, gag] of gags.entries()) gag.visible = index === variant;
     caseLid.visible = variant === 0 || variant === 3 || variant === 4;
 
@@ -132,6 +158,11 @@ export function buildGags(scene: T.Scene) {
         fish.rotation.set(bit * 5, Math.sin(bit * 4) * 0.59, 0.28 * Math.sin(bit * 13));
         fish.scale.setScalar(0.62 + rise * 0.89);
         break;
+      case RHINO_PRANK:
+        rhino.position.set(x, Math.abs(Math.sin(time * 12)) * 0.035, z);
+        rhino.rotation.y = heading;
+        rhino.scale.setScalar(size);
+        break;
       case 4:
         stampede.position.set(x, 0.06, z + 0.45);
 
@@ -152,7 +183,7 @@ export function buildGags(scene: T.Scene) {
   };
 }
 
-export function buildInstruments(scene: T.Scene) {
+export function buildInstruments(scene: T.Object3D) {
   const accordion = new T.Group();
 
   shape(accordion, new T.BoxGeometry(0.37, 0.19, 0.13), 0xad5950);
