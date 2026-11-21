@@ -1,6 +1,19 @@
 import * as T from 'three';
-import { BENCHES, BENCH_DEPTH, BENCH_Z, CAR_LENGTH, CAR_WIDTH, DOORS } from '../sim/car.ts';
+import {
+  BENCHES,
+  BENCH_DEPTH,
+  BENCH_Z,
+  CAR_LENGTH,
+  CAR_WIDTH,
+  CROSS_BACK,
+  CROSS_DEPTH,
+  CROSS_SEATS,
+  CROSS_WIDTH,
+  DOORS,
+} from '../sim/car.ts';
 import { STATIONS } from '../sim/crowd.ts';
+import { addPoster, platformMaterials } from './platformArt';
+import { buildPlatformPeople } from './platformPeople';
 
 const paint = (color: number, metalness = 0, roughness = 0.72) =>
   new T.MeshStandardMaterial({ color, metalness, roughness });
@@ -11,7 +24,14 @@ const panels = paint(0xd0d8cb);
 const seat = paint(0x478d88, 0.08, 0.38);
 const glass = paint(0x243a3c, 0.31);
 const floor = paint(0x515d53);
-const ivory = paint(0xc4bc9b);
+const windowGlass = new T.MeshStandardMaterial({
+  color: 0x72998e,
+  transparent: true,
+  opacity: 0.24,
+  roughness: 0.22,
+  depthWrite: false,
+});
+const crossSeat = paint(0x9b613c, 0.08, 0.42);
 const yellow = paint(0xe4b144);
 const ink = paint(0x183032);
 const lamp = new T.MeshBasicMaterial({ color: 0xf8e7bd });
@@ -89,11 +109,29 @@ export function buildCar(scene: T.Scene) {
   box(car, ink, 0, 1.91, back + 0.071, CAR_LENGTH, 0.16, 0.075);
 
   for (const { x, length } of BENCHES) {
-    box(car, panels, x, 1.01, back, length, 1.79, 0.13);
-    box(car, ink, x, 1.38, back + 0.074, Math.min(length - 0.19, 3.36), 0.62, 0.032);
-    box(car, glass, x, 1.38, back + 0.094, Math.min(length - 0.27, 3.29), 0.51, 0.015);
+    const opening = Math.min(length - 0.27, 3.29);
+    const jamb = (length - opening) / 2;
+
+    box(car, panels, x, 0.62, back, length, 1.02, 0.13);
+    box(car, panels, x, 1.775, back, length, 0.25, 0.13);
 
     for (const side of [-1, 1]) {
+      box(car, panels, x + (side * (length - jamb)) / 2, 1.39, back, jamb, 0.52, 0.13);
+    }
+
+    for (const y of [1.125, 1.645]) {
+      box(car, ink, x, y, back + 0.074, opening, 0.042, 0.032);
+    }
+
+    box(car, windowGlass, x, 1.385, back + 0.07, opening, 0.51, 0.015);
+
+    for (const side of [-1, 1]) {
+      if (
+        Math.abs(x) > 3 &&
+        CROSS_SEATS.some((item) => Math.sign(item.x) === Math.sign(x) && Math.sign(item.z) === side)
+      )
+        continue;
+
       const z = BENCH_Z * side;
       const count = Math.round(length / 0.47);
 
@@ -115,6 +153,20 @@ export function buildCar(scene: T.Scene) {
 
       if (side < 0) box(car, seat, x, 0.66, -1.111, length, 0.36, 0.13);
     }
+  }
+
+  for (const { x, z, direction } of CROSS_SEATS) {
+    const seatBack = x - (direction * (CROSS_DEPTH - CROSS_BACK)) / 2;
+
+    box(car, steel, x, 0.18, z, CROSS_DEPTH, 0.36, CROSS_WIDTH);
+    box(car, crossSeat, x, 0.414, z, CROSS_DEPTH, 0.105, CROSS_WIDTH);
+    box(car, crossSeat, seatBack, 0.735, z, CROSS_BACK, 0.53, CROSS_WIDTH);
+    box(car, darkSteel, x, 0.467, z, CROSS_DEPTH - 0.022, 0.008, 0.012);
+    box(car, darkSteel, seatBack + direction * 0.052, 0.735, z, 0.007, 0.5, 0.012);
+  }
+
+  for (const [index, x] of [-3.95, -1.55, 1.55, 3.95].entries()) {
+    addPoster(car, x, 1.82, back + 0.086, 0.64, 0.29, index);
   }
 
   for (const x of DOORS) {
@@ -170,10 +222,26 @@ export function buildTrack(scene: T.Scene) {
   const platform = new T.Group();
 
   scene.add(platform);
-  box(platform, ivory, 0, -0.125, -2.55, 28, 0.25, 2.57);
+  const surfaces = platformMaterials();
+  const updatePlatformPeople = buildPlatformPeople(platform);
+
+  box(platform, surfaces.floor, 0, -0.125, -2.55, 28, 0.25, 2.57);
   box(platform, yellow, 0, 0.006, -1.422, 28, 0.019, 0.33);
   box(platform, ink, 0, 1.05, -3.92, 28, 2.62, 0.22);
-  box(platform, ivory, 0, 1.29, -3.793, 28, 1.85, 0.055);
+  box(platform, surfaces.wall, 0, 1.39, -3.793, 28, 2.26, 0.055);
+  box(platform, darkSteel, 0, 0.24, -3.748, 28, 0.49, 0.047);
+
+  for (let index = -6; index <= 6; index++) {
+    const x = index * 2.08 + 0.48;
+
+    addPoster(platform, x, 1.62, -3.65, 0.99, 0.56, index + 8);
+
+    if (index % 2 === 0) {
+      box(platform, darkSteel, x - 0.64, 0.23, -3.24, 0.42, 0.46, 0.35);
+      box(platform, steel, x - 0.64, 0.46, -3.24, 0.46, 0.061, 0.37);
+    }
+  }
+
   box(platform, seat, 0, 0.52, -3.75, 28, 0.2, 0.04);
   box(platform, lamp, 0, 2.53, -3.35, 28, 0.07, 0.16);
 
@@ -224,6 +292,8 @@ export function buildTrack(scene: T.Scene) {
     tunnel.position.x = moving ? (time * 3.8) % 4.3 : 0;
     tunnel.visible = moving;
     platform.visible = Math.abs(offset) < 15;
+
+    if (platform.visible) updatePlatformPeople(time, moving && !departing ? stop + 1 : stop);
 
     for (const [index, sign] of signs.entries())
       sign.visible = index === (moving && !departing ? stop + 1 : stop);

@@ -1,9 +1,9 @@
-import { DOORS, HEIGHT_LIMIT } from './car.ts';
+import { CROSS_DEPTH, CROSS_SEATS, CROSS_WIDTH, DOORS, HEIGHT_LIMIT } from './car.ts';
 import { Grid } from './grid.ts';
 
 type Location = { x: number; z: number };
 
-type Slot = Location & { key: number; priority: number };
+type Slot = Location & { key: number; zone: number; priority: number };
 
 export type Rider = Location & {
   id: number;
@@ -32,7 +32,8 @@ export const STATIONS = [
   '59 St–Columbus Circle',
 ];
 
-const BOARDING = [5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 9, 9, 18];
+const BOARDING = [10, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 8, 8, 8, 18];
+const ZONES = 5;
 
 export class Crowd {
   riders: Rider[] = [];
@@ -50,17 +51,29 @@ export class Crowd {
       for (let row = 0; row < 5; row++) {
         const x = (column - 9.5) * 0.47;
         const z = (row - 2) * 0.46;
-        const priority = Math.abs(x) * 0.91 + this.random() * 1.15 + Number(row === 2) * 0.38;
 
-        this.slots.push({ x, z, key: column * 5 + row, priority });
+        if (
+          CROSS_SEATS.some(
+            (seat) =>
+              Math.abs(x - seat.x) < CROSS_DEPTH / 2 + 0.1 &&
+              Math.abs(z - seat.z) < CROSS_WIDTH / 2 + 0.1,
+          )
+        )
+          continue;
+
+        // Keep the aisle and boarding thresholds looser during the first few stops.
+        const priority =
+          this.random() +
+          Number(row === 2) * 0.38 +
+          Number(Math.abs(Math.abs(x) - 2.7) < 0.5) * 0.32;
+
+        this.slots.push({ x, z, key: column * 5 + row, zone: Math.floor(column / 4), priority });
       }
     }
 
     this.slots.sort((a, b) => a.priority - b.priority);
 
-    for (const slot of this.slots
-      .filter(({ x }) => Math.abs(x) > 1.75 && Math.abs(x) < 2.85)
-      .slice(0, 3)) {
+    for (const slot of this.assign([], 12)) {
       this.riders.push({ id: this.serial++, slot, ...slot, heading: Math.PI, stride: 0 });
     }
 
@@ -68,16 +81,14 @@ export class Crowd {
   }
 
   prepare(stop: number) {
-    const departures = stop === 0 ? 1 : 2;
+    const departures = 2;
     const leaving = this.riders
       .slice()
-      .sort((a, b) => Math.abs(a.x) - Math.abs(b.x))
+      .sort((a, b) => Math.abs(Math.abs(a.x) - 2.7) - Math.abs(Math.abs(b.x) - 2.7))
       .slice(0, departures);
     const leavingIds = new Set(leaving.map(({ id }) => id));
-    const occupied = new Set(
-      this.riders.filter(({ id }) => !leavingIds.has(id)).map(({ slot }) => slot.key),
-    );
-    const slots = this.slots.filter(({ key }) => !occupied.has(key)).slice(0, BOARDING[stop]);
+    const staying = this.riders.filter(({ id }) => !leavingIds.has(id)).map(({ slot }) => slot);
+    const slots = this.assign(staying, BOARDING[stop], stop >= 2);
 
     this.exited = leaving.length;
     this.boarded = slots.length;
@@ -100,7 +111,7 @@ export class Crowd {
 
     for (const [index, slot] of slots.entries()) {
       const door = this.door(slot.x);
-      const start = { x: door + ((index % 3) - 1) * 0.36, z: -2.45 - Math.floor(index / 6) * 0.45 };
+      const start = { x: door + ((index % 3) - 1) * 0.36, z: -2.32 - Math.floor(index / 6) * 0.36 };
       const lane = -0.24 + (index % 3) * 0.24;
       const approach = { x: slot.x + Math.sign(slot.x || 1) * 0.14, z: lane };
 
@@ -150,7 +161,7 @@ export class Crowd {
   }
 
   occupy(grid: Grid, mask: Uint8Array, stop: number) {
-    const packed = Math.min(1, Math.max(0, (stop - 4) / 7));
+    const packed = Math.min(1, Math.max(0, (stop - 2) / 6));
     const shoulderX = 0.16 + 0.09 * packed;
     const shoulderZ = 0.23 + 0.02 * packed;
 
@@ -177,6 +188,38 @@ export class Crowd {
         );
       }
     }
+  }
+
+  private assign(staying: Slot[], count: number, fillAisle = false) {
+    const occupied = new Set(staying.map(({ key }) => key));
+    const byZone = new Uint8Array(ZONES);
+
+    for (const { zone } of staying) byZone[zone]++;
+
+    const available = this.slots.filter(({ key }) => !occupied.has(key));
+
+    if (fillAisle) {
+      const rank = (slot: Slot) => slot.priority + Math.abs(slot.z) * 1.2;
+
+      available.sort((a, b) => rank(a) - rank(b));
+    }
+
+    const slots: Slot[] = [];
+
+    while (slots.length < count && available.length > 0) {
+      let best = 0;
+
+      for (let index = 1; index < available.length; index++) {
+        if (byZone[available[index].zone] < byZone[available[best].zone]) best = index;
+      }
+
+      const [slot] = available.splice(best, 1);
+
+      byZone[slot.zone]++;
+      slots.push(slot);
+    }
+
+    return slots;
   }
 
   private door(x: number) {

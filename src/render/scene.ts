@@ -4,14 +4,14 @@ import { buildBlob } from './blobMesh';
 import { buildCar, buildTrack } from './carScene';
 import { buildRiders } from './riders';
 
-export function createScene(canvas: HTMLCanvasElement, ride: Ride) {
+export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = false) {
   const renderer = new T.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: !arcade,
     powerPreference: 'high-performance',
   });
 
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+  renderer.setPixelRatio(arcade ? 1 : Math.min(window.devicePixelRatio, 1.6));
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.16;
@@ -35,7 +35,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride) {
   const updateDoors = buildCar(scene);
   const updateTrack = buildTrack(scene);
   const updateCrowd = buildRiders(scene);
-  const updateBlob = buildBlob(scene, ride.fluid);
+  const updateBlob = buildBlob(scene, ride.fluid, ride.mask);
   const burst = new T.Group();
   const dropGeometry = new T.IcosahedronGeometry(0.065, 1);
   const dropMaterial = new T.MeshStandardMaterial({
@@ -114,7 +114,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride) {
 
       camera.position.set(
         focus.x + 2.15,
-        3.35 + cameraLift + narrow * 0.35,
+        (arcade ? 3.6 : 3.55) + cameraLift + narrow * 0.35,
         focus.z + 5.0 + narrow,
       );
 

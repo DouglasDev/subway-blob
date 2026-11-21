@@ -18,12 +18,31 @@ export const BENCHES = [
   { x: 4.04, length: 1.45 },
 ];
 
+export const CROSS_SEATS = [
+  { x: -3.77, z: -0.81, direction: 1 },
+  { x: 3.77, z: 0.81, direction: -1 },
+];
+
+export const CROSS_WIDTH = 0.74;
+
+export const CROSS_DEPTH = 0.46;
+
+export const CROSS_BACK = 0.1;
+
 export function createCar() {
   const grid = new Grid(96, 17, 24);
   const fixtures = new Uint8Array(grid.size);
 
   for (const { x, length } of BENCHES) {
     for (const side of [-1, 1]) {
+      if (
+        CROSS_SEATS.some(
+          (seat) =>
+            Math.sign(seat.x) === Math.sign(x) && Math.sign(seat.z) === side && Math.abs(x) > 3,
+        )
+      )
+        continue;
+
       const z = side * BENCH_Z;
 
       grid.block(
@@ -32,6 +51,24 @@ export function createCar() {
         { x: x + length / 2, y: 0.47, z: z + BENCH_DEPTH / 2 },
       );
     }
+  }
+
+  for (const { x, z, direction } of CROSS_SEATS) {
+    const back = x - (direction * (CROSS_DEPTH - CROSS_BACK)) / 2;
+    const left = z - CROSS_WIDTH / 2;
+    const right = z + CROSS_WIDTH / 2;
+
+    grid.block(
+      fixtures,
+      { x: x - CROSS_DEPTH / 2, y: 0, z: left },
+      { x: x + CROSS_DEPTH / 2, y: 0.47, z: right },
+    );
+
+    grid.block(
+      fixtures,
+      { x: back - CROSS_BACK / 2, y: 0.47, z: left },
+      { x: back + CROSS_BACK / 2, y: 1, z: right },
+    );
   }
 
   for (const x of [-1.9, 1.9]) {

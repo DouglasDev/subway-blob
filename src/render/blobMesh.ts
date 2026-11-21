@@ -1,5 +1,6 @@
 import * as T from 'three';
 import type { Fluid } from '../sim/fluid.ts';
+import { roundSurface } from './smoothSurface';
 
 const faces = [
   [
@@ -39,17 +40,9 @@ const faces = [
     [1, 0, 0],
   ],
 ];
-const normals = [
-  [1, 0, 0],
-  [-1, 0, 0],
-  [0, 1, 0],
-  [0, -1, 0],
-  [0, 0, 1],
-  [0, 0, -1],
-];
 const triangles = [0, 1, 2, 0, 2, 3];
 
-export function buildBlob(scene: T.Scene, fluid: Fluid) {
+export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const group = new T.Group();
   const geometry = new T.BufferGeometry();
   const maxVertices = fluid.volume * 36;
@@ -60,6 +53,7 @@ export function buildBlob(scene: T.Scene, fluid: Fluid) {
 
   geometry.setAttribute('position', position);
   geometry.setAttribute('normal', direction);
+  geometry.boundingSphere = new T.Sphere(new T.Vector3(0, 0.85, 0), 6);
   const slime = new T.MeshPhysicalMaterial({
     color: 0xb6ec58,
     emissive: 0x486319,
@@ -88,6 +82,9 @@ export function buildBlob(scene: T.Scene, fluid: Fluid) {
   scene.add(group);
 
   const wet = new Uint8Array(fluid.grid.size);
+  const ray = new T.Raycaster();
+  const eyeOrigin = new T.Vector3();
+  const towardCar = new T.Vector3(0, 0, -1);
   let previous: number[] | undefined;
 
   return (popped: boolean) => {
@@ -101,8 +98,7 @@ export function buildBlob(scene: T.Scene, fluid: Fluid) {
     for (const id of fluid.cells) wet[id] = 1;
 
     const { grid } = fluid;
-    const smooth = new Map<number, T.Vector3>();
-    const boundary: { side: number; vertices: number[] }[] = [];
+    const boundary: number[][] = [];
     const vertexWidth = grid.width + 1;
     const vertexHeight = grid.height + 1;
     const vertexLayer = vertexHeight * vertexWidth;
@@ -119,41 +115,19 @@ export function buildBlob(scene: T.Scene, fluid: Fluid) {
           ([dx, dy, dz]) => (x + dx) * vertexLayer + (y + dy) * vertexWidth + z + dz,
         );
 
-        boundary.push({ side, vertices });
-
-        for (const vertex of vertices) {
-          const normal = smooth.get(vertex) ?? new T.Vector3();
-          const [nx, ny, nz] = normals[side];
-
-          normal.x += nx;
-          normal.y += ny;
-          normal.z += nz;
-          smooth.set(vertex, normal);
-        }
+        boundary.push(vertices);
       }
     }
 
+    const vertices = roundSurface(boundary, grid, blocked);
     let cursor = 0;
-    const normal = new T.Vector3();
 
-    for (const { side, vertices } of boundary) {
-      const base = normals[side];
-
+    for (const face of boundary) {
       for (const point of triangles) {
-        const vertex = vertices[point];
-        const avg = smooth.get(vertex)!;
+        const vertex = vertices.get(face[point])!;
 
-        positions[cursor] = (Math.floor(vertex / vertexLayer) - grid.length / 2) * grid.cell;
-        positions[cursor + 1] = (Math.floor(vertex / vertexWidth) % vertexHeight) * grid.cell;
-        positions[cursor + 2] = ((vertex % vertexWidth) - grid.width / 2) * grid.cell;
-
-        normal
-          .set(base[0] + avg.x * 0.64, base[1] + avg.y * 0.64, base[2] + avg.z * 0.64)
-          .normalize();
-
-        directions[cursor] = normal.x;
-        directions[cursor + 1] = normal.y;
-        directions[cursor + 2] = normal.z;
+        vertex.position.toArray(positions, cursor);
+        vertex.normal.toArray(directions, cursor);
         cursor += 3;
       }
     }
@@ -163,23 +137,20 @@ export function buildBlob(scene: T.Scene, fluid: Fluid) {
     direction.needsUpdate = true;
 
     for (const [index, eye] of eyes.entries()) {
+      eye.visible = false;
+
+      if (fluid.pressure >= 0.42) continue;
+
       const x = fluid.x + (index ? 0.075 : -0.075);
-      let front = -Infinity;
 
-      for (const id of fluid.cells) {
-        const point = id * 3;
+      ray.set(eyeOrigin.set(x, 1.461, 1.3), towardCar);
+      const hit = ray.intersectObject(mesh, false)[0];
 
-        if (
-          Math.abs(grid.centers[point] - x) < 0.052 &&
-          Math.abs(grid.centers[point + 1] - 1.45) < 0.051
-        ) {
-          front = Math.max(front, grid.centers[point + 2]);
-        }
-      }
+      if (!hit) continue;
 
-      eye.visible = Number.isFinite(front) && fluid.pressure < 0.42;
-
-      if (eye.visible) eye.position.set(x, 1.461, front + 0.051);
+      eye.position.copy(hit.point);
+      eye.position.z += 0.008;
+      eye.visible = true;
     }
   };
 }

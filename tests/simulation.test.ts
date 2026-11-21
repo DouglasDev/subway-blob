@@ -36,7 +36,7 @@ function maskWith(grid: Grid, cells: number[]) {
   return mask;
 }
 
-test('the empty car forms a connected upright shape with fixed volume', () => {
+test('the opening car forms a connected upright shape with fixed volume', () => {
   const { fluid, mask } = new Ride();
 
   assertVolume(fluid, mask);
@@ -96,7 +96,7 @@ test('the lid permits exactly enough cells and one cell less pops', () => {
   assert.equal(fluid.step(maskWith(grid, ceiling.slice(1))), false);
 });
 
-function play(x: number, frame: number, checkVolume = false) {
+function play(x: number, frame: number, checkVolume = false, steerFor = Infinity) {
   const ride = new Ride();
 
   ride.start();
@@ -105,7 +105,7 @@ function play(x: number, frame: number, checkVolume = false) {
   let previousTime = 0;
 
   for (let wall = 0; wall < 240; wall += frame) {
-    ride.advance(frame, { x, z: 0 });
+    ride.advance(frame, { x: ride.time < steerFor ? x : 0, z: 0 });
 
     if (ride.phase === 'popped' || ride.phase === 'complete') break;
 
@@ -128,7 +128,7 @@ function play(x: number, frame: number, checkVolume = false) {
 
 test('steering survives more of the same route and the pop station awards no point', () => {
   const idle = play(0, STEP, true);
-  const steered = play(1, STEP, true);
+  const steered = play(1, STEP, true, 1.5);
 
   assert.equal(idle.phase, 'popped');
   assert.equal(steered.phase, 'popped');
@@ -142,6 +142,34 @@ test('steering survives more of the same route and the pop station awards no poi
   assert.equal(restart.score, 0);
   assert.equal(restart.stop, 0);
   assert.equal(restart.phase, 'ready');
+});
+
+test('the opening crowd is distributed and South Ferry stays gentle', () => {
+  const ride = new Ride();
+
+  const counts = () =>
+    Array.from(
+      { length: 5 },
+      (_, index) =>
+        ride.crowd.riders.filter(
+          (rider) => Math.min(4, Math.floor((rider.x + 4.8) / 1.92)) === index,
+        ).length,
+    );
+
+  assert.equal(ride.crowd.onboard, 12);
+  assert.ok(Math.min(...counts()) >= 2);
+  ride.start();
+  let peak = 0;
+
+  for (let tick = 0; tick < 200 && ride.score === 0 && ride.phase !== 'popped'; tick++) {
+    ride.tick({ x: 0, z: 0 });
+    peak = Math.max(peak, ride.fluid.pressure);
+  }
+
+  assert.equal(ride.score, 1);
+  assert.equal(ride.crowd.onboard, 20);
+  assert.ok(Math.min(...counts()) >= 3);
+  assert.ok(peak < 0.35);
 });
 
 test('different render rates produce the same ride outcome', () => {
