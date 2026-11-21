@@ -8,7 +8,7 @@ import { ACROBAT_MOVES, MUSICIAN_SONGS, PRANKS } from './sim/guestContent.ts';
 import { RideAudio } from './audio';
 import { MovementPad, powerSlotLabel, TouchControls } from './TouchControls';
 import { Ride } from './sim/ride.ts';
-import type { Phase } from './sim/ride.ts';
+import type { Input, Phase } from './sim/ride.ts';
 import {
   Best,
   BestValue,
@@ -71,6 +71,7 @@ function soundMuted() {
   }
 }
 
+const compactRoute = window.matchMedia('(max-width: 520px)');
 const touchQuery = window.matchMedia(
   '(max-width: 730px), (pointer: coarse), (orientation: landscape) and (max-height: 500px) and (max-width: 950px)',
 );
@@ -79,6 +80,16 @@ function subscribeToTouchLayout(update: () => void) {
   touchQuery.addEventListener('change', update);
 
   return () => touchQuery.removeEventListener('change', update);
+}
+
+function subscribeToCompactRoute(update: () => void) {
+  compactRoute.addEventListener('change', update);
+
+  return () => compactRoute.removeEventListener('change', update);
+}
+
+function getCompactRoute() {
+  return compactRoute.matches;
 }
 
 function getTouchLayout() {
@@ -129,13 +140,16 @@ function snapshot(ride: Ride) {
     sustainedPower:
       ride.shieldUntil > ride.time
         ? ('shield' as const)
-        : ride.expressUntil > ride.time
-          ? ('express' as const)
-          : ride.fanUntil > ride.time
-            ? ('fan' as const)
-            : undefined,
+        : ride.fluidUntil > ride.time
+          ? ('fluid' as const)
+          : ride.expressUntil > ride.time
+            ? ('express' as const)
+            : ride.fanUntil > ride.time
+              ? ('fan' as const)
+              : undefined,
     variant: ride.encounter?.variant ?? 0,
     squeeze: ride.squeeze,
+    sticky: ride.sticky,
     power: ride.animation && ride.animation.until > ride.time ? ride.animation.cue : undefined,
   };
 }
@@ -152,6 +166,7 @@ function StopMarker({ name, label, current }: { name: string; label: string; cur
 
 export function App() {
   const touchLayout = useSyncExternalStore(subscribeToTouchLayout, getTouchLayout);
+  const twoStations = useSyncExternalStore(subscribeToCompactRoute, getCompactRoute);
   const [ride, setRide] = useState(newRide);
   const [hud, setHud] = useState(() => snapshot(ride));
   const [best, setBest] = useState(loadBest);
@@ -162,6 +177,7 @@ export function App() {
   const bubble = useRef<HTMLSpanElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const keys = useRef(new Set<string>());
+  const stick = useRef<Input>({ x: 0, z: 0 });
   const touches = useRef(new Map<number, string>());
   const arcade = useRef<typeof import('@rcade/plugin-input-classic') | null>(null);
   const actions = useRef(new Set<'a' | 'b' | 'start' | 'mute'>());
@@ -173,6 +189,7 @@ export function App() {
     next.start();
     keys.current.clear();
     touches.current.clear();
+    stick.current = { x: 0, z: 0 };
     setShowResult(false);
     setHud(snapshot(next));
     setRide(next);
@@ -194,6 +211,10 @@ export function App() {
   }, [audio, sound]);
 
   useEffect(() => () => audio.dispose(), [audio]);
+
+  useEffect(() => {
+    stick.current = { x: 0, z: 0 };
+  }, [touchLayout]);
 
   useEffect(() => {
     if (!arcadeEmbedded) return;
@@ -227,6 +248,7 @@ export function App() {
     const clear = () => {
       keys.current.clear();
       touches.current.clear();
+      stick.current = { x: 0, z: 0 };
     };
 
     const down = (event: KeyboardEvent) => {
@@ -308,7 +330,7 @@ export function App() {
       if (activate && ride.phase === 'ready') {
         audio.unlock();
         ride.start();
-      } else if (activate && poppedAt >= 0 && now - poppedAt > 640) {
+      } else if (activate && poppedAt >= 0 && now - poppedAt > 1060) {
         audio.unlock();
         restart();
       } else if (activeRide) {
@@ -319,8 +341,8 @@ export function App() {
       actions.current.clear();
 
       ride.advance(dt, {
-        x: Number(movement.has('right')) - Number(movement.has('left')),
-        z: Number(movement.has('down')) - Number(movement.has('up')),
+        x: Number(movement.has('right')) - Number(movement.has('left')) + stick.current.x,
+        z: Number(movement.has('down')) - Number(movement.has('up')) + stick.current.z,
       });
 
       view.draw(dt);
@@ -331,7 +353,12 @@ export function App() {
       );
 
       audio.travel(ride.phase === 'running', ride.renderTravel);
-      for (const cue of ride.cues.splice(0)) audio.cue(cue);
+
+      for (const cue of ride.cues.splice(0)) {
+        const source = cue === 'speaker' ? ride.encounter?.location : undefined;
+
+        audio.cue(cue, source ? (source.x - ride.fluid.x) / 4.5 : 0);
+      }
 
       const speaker = ride.act;
 
@@ -350,7 +377,7 @@ export function App() {
 
       if (ride.phase === 'popped') {
         if (poppedAt < 0) poppedAt = now;
-        if (now - poppedAt > 640) setShowResult(true);
+        if (now - poppedAt > 1060) setShowResult(true);
       }
 
       frame = requestAnimationFrame(animate);
@@ -437,12 +464,16 @@ export function App() {
             {best} {best === 1 ? 'stop' : 'stops'}
           </BestValue>
         </Best>
-        {!touchLayout && soundButton}
+        {soundButton}
       </Header>
 
       <Game aria-label="Subway Blob simulator" data-touch={touchLayout}>
-        <Route aria-label="Train route" data-touch={touchLayout}>
-          {!arcadeMode && (
+        <Route
+          aria-label="Train route"
+          data-touch={touchLayout}
+          data-two={touchLayout && twoStations}
+        >
+          {!arcadeMode && !(touchLayout && twoStations) && (
             <StopMarker label="Previous" name={STATIONS[stationIndex(hud.stop - 1)] ?? '—'} />
           )}
           <StopMarker
@@ -454,7 +485,11 @@ export function App() {
         </Route>
 
         <Stage data-touch={touchLayout}>
-          <View ref={canvas} aria-label="3D view of the subway car and your blob" />
+          <View
+            data-touch={touchLayout}
+            ref={canvas}
+            aria-label="3D view of the subway car and your blob"
+          />
           <Status data-doors={hud.phase === 'doors' || hud.phase === 'closing'} role="status">
             {phaseText[hud.phase]}
           </Status>
@@ -471,7 +506,8 @@ export function App() {
               {hud.guestPressure > 0 && ' · Too close'}
             </EncounterNotice>
           )}
-          {activePower && !ended && (
+          {hud.sticky && !ended && <PowerNotice data-mode="sticky">Sticky floor</PowerNotice>}
+          {activePower && !ended && !hud.sticky && (
             <PowerNotice data-mode={activePower}>{POWERS[activePower].name}</PowerNotice>
           )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}
@@ -516,14 +552,14 @@ export function App() {
           </Metric>
           <Gauge data-touch={touchLayout}>
             <GaugeCaption>
-              <MetricName>{arcadeMode ? 'Tolerance' : 'Squeeze tolerance'}</MetricName>
+              <MetricName>Squished</MetricName>
               <GaugeValue>{hud.tolerance}%</GaugeValue>
             </GaugeCaption>
             <GaugeBar
               max={100}
               value={hud.tolerance}
               data-high={hud.tolerance < 35 || hud.squeeze >= 0.75}
-              aria-label="Squeeze tolerance"
+              aria-label="Squished"
             />
           </Gauge>
           {!touchLayout && (
@@ -538,11 +574,12 @@ export function App() {
           <TouchControls
             inventory={hud.inventory}
             disabled={graphicsError || ended || hud.phase === 'ready'}
-            onDirection={setTouchDirection}
+            onStick={(input) => {
+              stick.current = input;
+            }}
             onPower={(slot) => ride.usePower(slot)}
           >
-            {startButton}
-            {soundButton}
+            {startButton || null}
           </TouchControls>
         ) : (
           <Inventory aria-label="Power-up slots">
@@ -558,7 +595,7 @@ export function App() {
                   onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
                 >
                   <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
-                  {power === 'cool' && ` · +${COOL_POINTS} tolerance`}
+                  {power === 'cool' && ` · +${COOL_POINTS} meter points`}
                 </InventorySlot>
               );
             })}

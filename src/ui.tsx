@@ -223,6 +223,19 @@ export const Route = styled.div`
     }
   }
 
+  &[data-touch='true'] {
+    --stop-name-wrap: nowrap;
+    padding-block: 7px;
+
+    @media (orientation: landscape) and (max-height: 500px) {
+      padding-block: 3px;
+    }
+  }
+
+  &[data-two='true'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   html[data-arcade='true'] & {
     grid-template-columns: 1.25fr 1fr;
     flex: none;
@@ -258,6 +271,7 @@ export const StopName = styled.span`
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: var(--stop-name-wrap, normal);
 `;
 
 export const RouteLabel = styled.span`
@@ -726,10 +740,10 @@ export const SoundButton = styled.button`
   }
 
   &[data-touch='true'] {
-    min-width: 64px;
-    min-height: 44px;
-    padding-inline: 12px;
-    border-radius: 22px;
+    min-width: 48px;
+    min-height: 38px;
+    padding-inline: 7px;
+    border-radius: 6px;
   }
 
   html[data-arcade='true'] & {

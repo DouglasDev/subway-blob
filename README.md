@@ -15,11 +15,11 @@ Open the loopback URL printed by Vite in a browser with WebGL2.
 
 ## Controls
 
-| Platform          | Steer             | Start or retry        | Use the two held pickups | Toggle sound     |
-| ----------------- | ----------------- | --------------------- | ------------------------ | ---------------- |
-| Desktop           | WASD or arrows    | Enter or Start ride   | Z and X                  | M or Sound       |
-| Standalone mobile | Bottom-left D-pad | Start ride            | Bottom-right A and B     | Bottom Sound     |
-| RCade             | Player 1 joystick | A or one-player start | A and B                  | Two-player start |
+| Platform          | Steer                | Start or retry        | Use the two held pickups | Toggle sound     |
+| ----------------- | -------------------- | --------------------- | ------------------------ | ---------------- |
+| Desktop           | WASD or arrows       | Enter or Start ride   | Z and X                  | M or Sound       |
+| Standalone mobile | Bottom-left joystick | Start ride            | Bottom-right A and B     | Sound in header  |
+| RCade             | Player 1 joystick    | A or one-player start | A and B                  | Two-player start |
 
 RCade’s web player maps the virtual controls to WASD, F, G, 1, and 2 by default. Add `?cabinet` locally to preview the 336 × 262 layout. The 4 train has its own best score. On the cabinet the score lasts for the current game session.
 
@@ -41,4 +41,6 @@ pnpm run build
 
 Every push to `main` runs one GitHub Actions workflow that builds and tests the game, then deploys the same build to [GitHub Pages](https://douglasdev.github.io/subway-blob/) and [RCade](https://rcade.dev/games/subway-blob). You can also run **Publish Subway Blob** manually from Actions.
 
-Guest locations are randomized throughout each twelve-stop stretch, including terminal visits. Dialogue draws from a shuffled list without repeats during a ride. Staying close to a guest slowly drains tolerance. Each station offers one pickup, increasing to two from stop eight. The pickup deck favors Stink Bomb and Slime Spray over Crazy Mode. Annoying Alarm makes riders back off and can send some toward the doors, while Sell Candy draws them away to a cluster. Cool Pack restores up to 25 squeeze tolerance points and keeps blob volume unchanged. Quiet Bubble blocks guest drain and cuts squeeze pressure by 80% for half a normal stop cycle, about 7.5 seconds. Speed Boost speeds up movement for 10 seconds, and Pocket Fan suppresses smoke and heat penalties for 14 seconds.
+Guest locations are randomized throughout each sixteen-stop stretch, including terminal visits. Dialogue draws from a shuffled list without repeats during a ride. Staying close to a guest slowly drains tolerance. Each station offers one pickup, increasing to two from stop eight. The pickup deck favors Stink Bomb and Slime Spray over Crazy Mode. Annoying Alarm makes riders back off and can send some toward the doors, while Sell Candy draws them away to a cluster. Cool Pack restores up to 25 Squished meter points and keeps blob volume unchanged. Quiet Bubble blocks guest drain and cuts squeeze pressure by 80% for 6.2 seconds. Speed Boost speeds up movement for 10 seconds, and Pocket Fan suppresses smoke and heat penalties for 14 seconds. Super Fluid flows farther through connected gaps for 10 seconds. Slime Spray hits riders in the direction the blob is facing.
+
+Travel between stations takes about 6.5 seconds. The base dwell is 5.3 seconds, with extra time when the doors are still busy. Watch for a loudspeaker, sticky soda, a shoving rider, and a seated rider with oversized legs.

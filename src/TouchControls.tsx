@@ -1,5 +1,7 @@
 import { styled } from '@linaria/react';
-import type { ReactNode } from 'react';
+import { useRef, useState } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
+import type { Input } from './sim/ride.ts';
 import { COOL_POINTS, POWERS } from './sim/powers.ts';
 import type { Power } from './sim/powers.ts';
 
@@ -16,7 +18,7 @@ const Deck = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 8px 12px;
-  padding: 12px clamp(8px, 3vw, 20px) 8px;
+  padding: 8px clamp(8px, 3vw, 20px);
   background: #1b2a23;
   border-top: 1px solid #475b4f;
   user-select: none;
@@ -27,6 +29,131 @@ const Deck = styled.div`
     padding-block: 3px;
   }
 `;
+
+const Stick = styled.div`
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 106px;
+  height: 106px;
+  border: 2px solid #506456;
+  border-radius: 50%;
+  background: #17241e;
+  box-shadow: inset 0 3px 11px #0d1711;
+  touch-action: none;
+  cursor: grab;
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    grid-area: pad;
+  }
+
+  &[data-active='true'] {
+    cursor: grabbing;
+    border-color: #92b280;
+  }
+
+  &[data-disabled='true'] {
+    opacity: 0.59;
+    cursor: default;
+  }
+`;
+
+const StickMarks = styled.span`
+  position: absolute;
+  inset: 6px;
+  display: grid;
+  place-items: center;
+  color: #8aa18e;
+  font: 700 0.72rem var(--mono);
+  pointer-events: none;
+
+  &[data-axis='x'] {
+    justify-content: stretch;
+    grid-template-columns: 1fr 1fr;
+    justify-items: start;
+
+    span:nth-child(2) {
+      justify-self: end;
+    }
+  }
+
+  &[data-axis='z'] {
+    align-content: space-between;
+  }
+`;
+
+const StickKnob = styled.span`
+  width: 45px;
+  height: 45px;
+  border: 1px solid #768e78;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 27%, #536a57, #2c4235 73%);
+  box-shadow: 0 3px 6px #090f0c;
+  pointer-events: none;
+`;
+
+function AnalogPad({ disabled, onStick }: { disabled: boolean; onStick: (input: Input) => void }) {
+  const pointer = useRef<number | null>(null);
+  const [input, setInput] = useState<Input>({ x: 0, z: 0 });
+  const [active, setActive] = useState(false);
+
+  function update(event: PointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const radius = bounds.width * 0.36;
+    const x = (event.clientX - bounds.left - bounds.width / 2) / radius;
+    const z = (event.clientY - bounds.top - bounds.height / 2) / radius;
+    const distance = Math.hypot(x, z);
+    const strength = Math.min(1, Math.max(0, (distance - 0.13) / 0.87));
+    const scale = distance ? strength / distance : 0;
+    const next = { x: x * scale, z: z * scale };
+
+    setInput(next);
+    onStick(next);
+  }
+
+  function release(event: PointerEvent<HTMLDivElement>) {
+    if (pointer.current !== event.pointerId) return;
+
+    pointer.current = null;
+    setActive(false);
+    setInput({ x: 0, z: 0 });
+    onStick({ x: 0, z: 0 });
+  }
+
+  return (
+    <Stick
+      role="group"
+      aria-label="Touch joystick"
+      aria-disabled={disabled}
+      data-active={active}
+      data-disabled={disabled}
+      onPointerDown={(event) => {
+        if (disabled || pointer.current !== null) return;
+
+        event.currentTarget.setPointerCapture(event.pointerId);
+        pointer.current = event.pointerId;
+        setActive(true);
+        update(event);
+      }}
+      onPointerMove={(event) => {
+        if (pointer.current === event.pointerId) update(event);
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+    >
+      <StickMarks aria-hidden="true" data-axis="x">
+        <span>‹</span>
+        <span>›</span>
+      </StickMarks>
+      <StickMarks aria-hidden="true" data-axis="z">
+        <span>⌃</span>
+        <span>⌄</span>
+      </StickMarks>
+      <StickKnob style={{ translate: `${input.x * 31}px ${input.z * 31}px` }} />
+    </Stick>
+  );
+}
 
 const Pad = styled.div`
   display: grid;
@@ -206,7 +333,7 @@ const Utility = styled.div`
 export function powerSlotLabel(power: Power | null, slot: number) {
   if (!power) return `Empty power-up slot ${slot + 1}`;
 
-  const effect = power === 'cool' ? `. Restore up to ${COOL_POINTS} squeeze tolerance points` : '';
+  const effect = power === 'cool' ? `. Restore up to ${COOL_POINTS} Squished meter points` : '';
 
   return `Use ${POWERS[power].name} in slot ${slot + 1}${effect}`;
 }
@@ -248,7 +375,7 @@ type TouchControlsProps = {
   inventory: (Power | null)[];
   disabled: boolean;
   onPower: (slot: 0 | 1) => void;
-  onDirection: MovementProps['onDirection'];
+  onStick: (input: Input) => void;
   children: ReactNode;
 };
 
@@ -256,12 +383,12 @@ export function TouchControls({
   inventory,
   disabled,
   onPower,
-  onDirection,
+  onStick,
   children,
 }: TouchControlsProps) {
   return (
     <Deck role="group" aria-label="Touch controls">
-      <MovementPad disabled={disabled} onDirection={onDirection} />
+      <AnalogPad disabled={disabled} onStick={onStick} />
       <ActionButtons role="group" aria-label="Power-up slots">
         {([0, 1] as const).map((slot) => {
           const power = inventory[slot];
@@ -279,13 +406,13 @@ export function TouchControls({
               </ActionButton>
               <ActionLabel>
                 {power ? POWERS[power].name : 'Empty'}
-                {power === 'cool' && ` · +${COOL_POINTS} tolerance`}
+                {power === 'cool' && ` · +${COOL_POINTS} meter points`}
               </ActionLabel>
             </ActionSlot>
           );
         })}
       </ActionButtons>
-      <Utility>{children}</Utility>
+      {children && <Utility>{children}</Utility>}
     </Deck>
   );
 }
