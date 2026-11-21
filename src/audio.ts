@@ -1,4 +1,4 @@
-import type { Cue } from './sim/encounters.ts';
+import type { Cue, Encounter } from './sim/encounters.ts';
 
 const music = {
   roll: new URL('./assets/rolling.mp3', import.meta.url).href,
@@ -6,36 +6,31 @@ const music = {
   chime: new URL('./assets/chime.mp3', import.meta.url).href,
 };
 
+const performances = {
+  acrobat: new URL('./assets/showtime.mp3', import.meta.url).href,
+  musician: new URL('./assets/off-key.mp3', import.meta.url).href,
+  prank: new URL('./assets/pigeon.mp3', import.meta.url).href,
+};
+
+const powerEffects = {
+  crazy: new URL('./assets/crazy.mp3', import.meta.url).href,
+  fart: new URL('./assets/fart.mp3', import.meta.url).href,
+  vomit: new URL('./assets/vomit.mp3', import.meta.url).href,
+};
+
+function clip(url: string, volume: number, loop = false) {
+  const audio = new Audio(url);
+
+  audio.volume = volume;
+  audio.loop = loop;
+  audio.preload = 'auto';
+
+  return audio;
+}
+
 type Tone = { at: number; length: number; pitch: number; end?: number; shape?: OscillatorType };
 
 const sounds: Partial<Record<Cue, Tone[]>> = {
-  acrobat: [
-    { at: 0, length: 0.07, pitch: 140, end: 74, shape: 'square' },
-    { at: 0.1, length: 0.23, pitch: 1650, end: 1040 },
-  ],
-  musician: [
-    { at: 0, length: 0.37, pitch: 196, shape: 'sawtooth' },
-    { at: 0.26, length: 0.39, pitch: 254, shape: 'sawtooth' },
-    { at: 0.66, length: 0.26, pitch: 175, end: 150, shape: 'sawtooth' },
-  ],
-  prank: [
-    { at: 0, length: 0.35, pitch: 182, end: 33, shape: 'square' },
-    { at: 0.11, length: 0.23, pitch: 521, end: 740 },
-    { at: 0.33, length: 0.32, pitch: 710, end: 442 },
-  ],
-  crazy: [
-    { at: 0, length: 0.16, pitch: 312, end: 630 },
-    { at: 0.17, length: 0.14, pitch: 550, end: 277 },
-    { at: 0.33, length: 0.17, pitch: 370, end: 900 },
-  ],
-  fart: [
-    { at: 0, length: 0.52, pitch: 95, end: 33, shape: 'sawtooth' },
-    { at: 0.22, length: 0.2, pitch: 63, end: 45, shape: 'triangle' },
-  ],
-  vomit: [
-    { at: 0, length: 0.25, pitch: 148, end: 45, shape: 'square' },
-    { at: 0.24, length: 0.2, pitch: 105, end: 31, shape: 'sawtooth' },
-  ],
   pickup: [
     { at: 0, length: 0.15, pitch: 660 },
     { at: 0.1, length: 0.22, pitch: 960 },
@@ -44,23 +39,32 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
 };
 
 export class RideAudio {
-  private readonly roll = new Audio(music.roll);
-  private readonly announcement = new Audio(music.announcement);
-  private readonly chime = new Audio(music.chime);
+  private readonly roll = clip(music.roll, 0.26, true);
+  private readonly announcement = clip(music.announcement, 0.48);
+  private readonly chime = clip(music.chime, 0.61);
+  private readonly performanceClips = {
+    acrobat: clip(performances.acrobat, 0.59, true),
+    musician: clip(performances.musician, 0.52, true),
+    prank: clip(performances.prank, 0.61, true),
+  };
+  private readonly effects = {
+    crazy: clip(powerEffects.crazy, 0.75),
+    fart: clip(powerEffects.fart, 0.91),
+    vomit: clip(powerEffects.vomit, 0.75),
+  };
+  private readonly clips = [
+    this.roll,
+    this.announcement,
+    this.chime,
+    ...Object.values(this.performanceClips),
+    ...Object.values(this.effects),
+  ];
   private context?: AudioContext;
   private bus?: GainNode;
   private allowed = false;
   private muted = false;
   private rolling = false;
-
-  constructor() {
-    this.roll.loop = true;
-    this.roll.volume = 0.26;
-    this.announcement.volume = 0.48;
-    this.chime.volume = 0.61;
-
-    for (const clip of [this.roll, this.announcement, this.chime]) clip.preload = 'auto';
-  }
+  private activePerformance?: HTMLAudioElement;
 
   unlock() {
     this.allowed = true;
@@ -82,14 +86,16 @@ export class RideAudio {
   setMute(muted: boolean) {
     this.muted = muted;
 
-    for (const clip of [this.roll, this.announcement, this.chime]) clip.muted = muted;
+    for (const clip of this.clips) clip.muted = muted;
     if (this.bus && this.context)
       this.bus.gain.setTargetAtTime(muted ? 0 : 1, this.context.currentTime, 0.035);
   }
 
   travel(running: boolean, progress: number) {
     if (running === this.rolling) {
-      if (running) this.roll.volume = 0.11 + Math.sin(Math.PI * progress) * 0.32;
+      if (running)
+        this.roll.volume =
+          (0.11 + Math.sin(Math.PI * progress) * 0.32) * (this.activePerformance ? 0.55 : 1);
 
       return;
     }
@@ -100,8 +106,28 @@ export class RideAudio {
     else this.roll.pause();
   }
 
+  performance(kind: Encounter | undefined) {
+    const active =
+      kind === 'acrobat' || kind === 'musician' || kind === 'prank'
+        ? this.performanceClips[kind]
+        : undefined;
+
+    if (active === this.activePerformance) return;
+
+    this.activePerformance?.pause();
+    this.activePerformance = active;
+
+    if (active && this.allowed) this.play(active);
+  }
+
   cue(cue: Cue) {
     if (!this.allowed || this.muted) return;
+
+    if (cue === 'crazy' || cue === 'fart' || cue === 'vomit') {
+      this.play(this.effects[cue]);
+
+      return;
+    }
 
     if (cue === 'announcement' || cue === 'chime') {
       this.play(cue === 'announcement' ? this.announcement : this.chime);
@@ -132,8 +158,9 @@ export class RideAudio {
 
   reset() {
     this.rolling = false;
+    this.activePerformance = undefined;
 
-    for (const clip of [this.roll, this.announcement, this.chime]) {
+    for (const clip of this.clips) {
       clip.pause();
       clip.currentTime = 0;
     }

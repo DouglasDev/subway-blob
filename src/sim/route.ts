@@ -16,3 +16,15 @@ export const STATIONS = [
   'Franklin Av–Medgar Evers College',
   'Crown Hts–Utica Av',
 ];
+
+const leg = STATIONS.length - 1;
+
+export function stationIndex(stop: number) {
+  const cycle = stop % (leg * 2);
+
+  return cycle <= leg ? cycle : leg * 2 - cycle;
+}
+
+export function travelDirection(stop: number) {
+  return stationIndex(stop + 1) > stationIndex(stop) ? 1 : -1;
+}

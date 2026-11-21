@@ -34,53 +34,79 @@ export type Cue =
 
 export const POWER_NAMES: Record<Power, string> = { crazy: 'Crazy Mode', gross: 'Gross-out' };
 
-export function encounterSchedule(stopCount: number, random: () => number) {
-  const entries = Object.keys(ENCOUNTERS) as Encounter[];
+export const ENCOUNTER_CYCLE = 12;
 
-  for (let index = entries.length - 1; index > 0; index--) {
+function shuffle<T>(items: T[], random: () => number) {
+  for (let index = items.length - 1; index > 0; index--) {
     const other = Math.floor(random() * (index + 1));
 
-    [entries[index], entries[other]] = [entries[other], entries[index]];
+    [items[index], items[other]] = [items[other], items[index]];
   }
 
-  // Allocate every duration before scattering the remaining quiet stops.
-  const quiet = new Uint8Array(entries.length + 1);
-  const duration = entries.reduce((sum, kind) => sum + ENCOUNTERS[kind].stops, 0);
+  return items;
+}
 
-  for (let gap = 0; gap < stopCount - 4 - duration; gap++)
-    quiet[Math.floor(random() * quiet.length)]++;
-
-  let start = 3;
+export function encounterSchedule(start: number, random: () => number) {
+  const performers = shuffle<Encounter>(['acrobat', 'musician', 'prank'], random);
+  const modifiers = shuffle<Encounter>(['smoker', 'ac', 'weird'], random);
   const schedule = new Map<number, Encounter>();
 
-  for (const [index, kind] of entries.entries()) {
-    start += quiet[index];
-    schedule.set(start, kind);
-    start += ENCOUNTERS[kind].stops;
-  }
+  for (const [index, slot] of [1, 2, 4].entries()) schedule.set(start + slot, performers[index]);
+
+  schedule.set(start + 5, 'takes');
+
+  for (const [index, slot] of [7, 8, 10].entries()) schedule.set(start + slot, modifiers[index]);
 
   return schedule;
 }
 
 export function squeezeTolerance(value: number, squeeze: number, dt: number, smoker = false) {
-  if (squeeze >= (smoker ? 0.6 : 0.75)) return Math.max(0, value - dt / 30);
-  if (squeeze < 0.4) return Math.min(1, value + dt / 15);
+  const low = smoker ? 0.14 : 0.21;
+  const high = smoker ? 0.6 : 0.75;
 
-  return value;
+  if (squeeze < low) return Math.min(1, value + dt / 15);
+
+  const strain = Math.min(1, (squeeze - low) / (high - low));
+
+  return Math.max(0, value - (strain * (0.38 + 0.62 * strain) * dt) / 30);
 }
 
-export const LINES: Partial<Record<Encounter, string[]>> = {
-  takes: [
-    'Kareem: What’s your take?',
-    'Rider: The quiet car should be a library.',
-    'Kareem: How late is it open?',
-    'Rider: Until someone returns the train.',
-  ],
-  weird: [
-    'I taught a pigeon to parallel park.',
-    'The moon owes me seven dollars.',
-    'Nobody checks the expiration date on stairs.',
-    'Do you think a ghost can get a seat?',
-  ],
-  prank: ['Who ordered the inflatable pigeon?'],
-};
+export const PRANK_LINES = [
+  'Eric: I brought my emotional support pigeon.',
+  'Eric: It’s also the assistant conductor.',
+  'Eric: Look out! It’s learning to fly!',
+];
+
+export const TAKES = [
+  'Dress shoes should have turn signals.',
+  'A folding chair is a carry-on apartment.',
+  'A subway nap counts as time travel.',
+  'Soup is a drink with furniture.',
+  'Bodegas should offer a cat loyalty card.',
+  'There should be a quiet car for your phone.',
+  'Escalators should have an overtaking lane.',
+  'The last slice of pizza is a public trust.',
+  'Every umbrella should come with an apology.',
+  'A group chat needs an emergency exit.',
+  'Freeze the rent and unfreeze the platform.',
+  'The train should pause for a good bass solo.',
+  'Window seats should come with binoculars.',
+  'All tiny dogs are off-duty security guards.',
+  'The mayor should ride the train with groceries.',
+  'A rainy day should count as a free transfer.',
+  'The subway map should be a picnic blanket.',
+  'Stop putting tiny forks in big desserts.',
+  'Pigeons know the weekend schedule.',
+  'We should let the city have a bedtime.',
+  'The best bagel is the one you didn’t share.',
+  'Running for the train is an unpaid internship.',
+  'Every station needs a lost-and-found fashion show.',
+  'Any bag that needs a second seat pays fare.',
+];
+
+export const WEIRD_LINES = [
+  'I taught a pigeon to parallel park.',
+  'The moon owes me seven dollars.',
+  'Nobody checks the expiration date on stairs.',
+  'Do you think a ghost can get a seat?',
+];

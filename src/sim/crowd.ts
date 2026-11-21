@@ -68,7 +68,7 @@ export class Crowd {
   }
 
   prepare(stop: number, encounter?: Encounter) {
-    const departures = 2;
+    const departures = stop < 14 ? 2 : 4;
     const leaving = this.riders.filter((rider) => rider.wantsExit);
     const regular = this.riders
       .filter((rider) => !rider.wantsExit && !rider.role && !rider.trajectory)
@@ -78,7 +78,7 @@ export class Crowd {
     leaving.push(...regular);
     const leavingIds = new Set(leaving.map(({ id }) => id));
     const staying = this.riders.filter(({ id }) => !leavingIds.has(id)).map(({ slot }) => slot);
-    const slots = this.assign(staying, BOARDING[stop], stop >= 2);
+    const slots = this.assign(staying, BOARDING[Math.min(stop, BOARDING.length - 1)], stop >= 2);
 
     this.exited = 0;
     this.boarded = slots.length;
@@ -102,13 +102,15 @@ export class Crowd {
       };
 
       if (index === 0 && encounter && encounter !== 'ac') {
-        const x = encounter === 'acrobat' ? -1.62 : door * 0.62;
-        const z = encounter === 'acrobat' ? -0.26 : -0.52;
+        const x = encounter === 'acrobat' ? 1.7 : encounter === 'prank' ? -0.38 : 0.03;
+        const z = encounter === 'acrobat' ? 0.13 : encounter === 'prank' ? 0.39 : 0.42;
 
         rider.role = encounter;
         rider.prop = undefined;
         rider.slot = { ...slot, x, z };
-        rider.trajectory.points.splice(-1, 1, rider.slot);
+        rider.trajectory.points.splice(-2, 2, { x, z: lane }, rider.slot);
+        rider.trajectory.delay = 0.58;
+        rider.trajectory.span = 1.85;
       }
 
       this.riders.push(rider);
@@ -236,7 +238,7 @@ export class Crowd {
     const performer = this.performer;
     const performance =
       performer &&
-      !performer.trajectory &&
+      performer.z > -1.02 &&
       (performer.role === 'acrobat' || performer.role === 'musician' || performer.role === 'prank');
 
     for (const rider of this.riders) {
@@ -263,7 +265,7 @@ export class Crowd {
         } else if (performance && !rider.role && Math.abs(rider.slot.x - performer.x) < 2.3) {
           target = {
             x: rider.slot.x + Math.sign(rider.slot.x - performer.x) * 0.38,
-            z: 0.69 + rider.slot.z * 0.22,
+            z: -0.67 + rider.slot.z * 0.2,
           };
         }
 
@@ -382,6 +384,20 @@ export class Crowd {
 
     rider.heading = Math.atan2(dx, dz);
     rider.stride = time * 12 + rider.id;
+  }
+
+  congestion(blob: Location) {
+    let exposure = 0;
+
+    for (const rider of this.riders) {
+      if (rider.z < -1.2) continue;
+
+      const distance = Math.hypot(rider.x - blob.x, (rider.z - blob.z) * 0.92);
+
+      exposure += Math.max(0, 1 - distance / 1.1) ** 1.35;
+    }
+
+    return Math.min(1, exposure / 2.7);
   }
 
   occupy(grid: Grid, mask: Uint8Array, stop: number) {

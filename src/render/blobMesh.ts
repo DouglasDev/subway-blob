@@ -92,17 +92,15 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const amber = new T.Color(0xffbc48);
   const red = new T.Color(0xf74136);
 
-  return (popped: boolean, tolerance: number, wobble: number) => {
+  return (popped: boolean, heat: number, wobble: number) => {
     slime.color
-      .copy(tolerance > 0.5 ? green : amber)
-      .lerp(
-        tolerance > 0.5 ? amber : red,
-        tolerance > 0.5 ? (1 - tolerance) * 2 : 1 - tolerance * 2,
-      );
+      .copy(heat < 0.5 ? green : amber)
+      .lerp(heat < 0.5 ? amber : red, heat < 0.5 ? heat * 2 : (heat - 0.5) * 2);
 
     slime.emissive.copy(slime.color).multiplyScalar(0.38);
-    group.position.x = wobble * 0.048;
+    group.position.x = wobble * 0.13;
     group.visible = !popped;
+    group.position.y = 0.12 * Math.abs(wobble);
 
     if (popped || fluid.cells === previous) return;
 

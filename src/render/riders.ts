@@ -74,8 +74,9 @@ export function buildRiders(scene: T.Object3D) {
       person.rotation.y = heading + (stride ? 0 : ((id % 5) - 2) * 0.25);
       const performing = stride === 0;
 
-      person.rotation.z = role === 'acrobat' && performing ? Math.sin(time * 6) * 0.62 : 0;
-      if (role === 'acrobat' && performing) person.position.y += Math.abs(Math.sin(time * 6)) * 0.2;
+      person.rotation.z = role === 'acrobat' && performing ? Math.sin(time * 6) * 1.75 : 0;
+      if (role === 'acrobat' && performing)
+        person.position.y += Math.abs(Math.sin(time * 6)) * 0.44;
       person.scale.setScalar(size);
       person.updateMatrix();
 

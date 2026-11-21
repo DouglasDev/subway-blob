@@ -4,6 +4,7 @@ import { buildBlob } from './blobMesh';
 import { buildCar, buildTrack } from './carScene';
 import { buildRiders } from './riders';
 import { buildRideObjects } from './rideObjects';
+import { buildPowerEffects } from './powerEffects';
 
 export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = false) {
   const renderer = new T.WebGLRenderer({
@@ -37,6 +38,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   const updateTrack = buildTrack(scene);
   const updateCrowd = buildRiders(scene);
   const updateObjects = buildRideObjects(scene);
+  const updatePower = buildPowerEffects(scene);
   const updateBlob = buildBlob(scene, ride.fluid, ride.mask);
   const burst = new T.Group();
   const dropGeometry = new T.IcosahedronGeometry(0.065, 1);
@@ -97,6 +99,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
         updateDoors(ride.door);
         updateCrowd(ride.crowd.riders, ride.time);
         updateObjects(ride);
+        updatePower(ride);
         lastTick = ride.time;
         lastPhase = ride.phase;
       }
@@ -106,7 +109,9 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       updateTrack(ride.stop, ride.renderTravel, inTunnel, ride.time);
       const crazy = ride.animation?.cue === 'crazy' && ride.time < ride.animation.until;
 
-      updateBlob(popped, ride.tolerance, crazy ? Math.sin(ride.time * 34) : 0);
+      const heat = Math.max(1 - ride.tolerance, ride.squeeze);
+
+      updateBlob(popped, heat, crazy ? Math.sin(ride.time * 28) : 0);
 
       if (popped) {
         popTime += dt;
@@ -124,7 +129,15 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
         }
       }
 
-      goal.set(ride.fluid.x * 0.74, 0.85, (ride.fluid.z - 0.32) * 0.5);
+      const performer = ride.act;
+      const stageFocus =
+        performer &&
+        (performer.role === 'prank' ||
+          performer.role === 'acrobat' ||
+          performer.role === 'musician');
+      const focusX = stageFocus ? ride.fluid.x * 0.56 + performer.x * 0.23 : ride.fluid.x * 0.74;
+
+      goal.set(focusX, 0.85, (ride.fluid.z - 0.32) * 0.5);
       focus.lerp(goal, 1 - Math.exp(-4 * dt));
       cameraLift += (ride.squeeze * 1.55 - cameraLift) * (1 - Math.exp(-3 * dt));
       const narrow = aspect < 1 ? (1 - aspect) * 2.15 : 0;

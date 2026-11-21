@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
-import { STATIONS } from './sim/route.ts';
-import { ENCOUNTERS, LINES, POWER_NAMES } from './sim/encounters.ts';
+import { STATIONS, stationIndex } from './sim/route.ts';
+import { ENCOUNTERS, POWER_NAMES } from './sim/encounters.ts';
 import { RideAudio } from './audio';
 import { Ride } from './sim/ride.ts';
 import type { Phase } from './sim/ride.ts';
@@ -38,6 +38,7 @@ import {
   PadButton,
   Prompt,
   PromptTitle,
+  PowerNotice,
   Route,
   RouteDot,
   RouteLabel,
@@ -94,7 +95,6 @@ const phaseText: Record<Phase, string> = {
   closing: 'Doors closing',
   running: 'In transit',
   popped: 'Ride ended',
-  complete: 'Route complete',
 };
 
 function loadBest() {
@@ -116,21 +116,10 @@ function snapshot(ride: Ride) {
     tolerance: Math.round(ride.tolerance * 100),
     encounter: ride.encounter?.kind,
     inventory: [...ride.inventory],
-    speech: speechLine(ride),
+    speech: ride.speech,
+    squeeze: ride.squeeze,
+    power: ride.animation && ride.animation.until > ride.time ? ride.animation.cue : undefined,
   };
-}
-
-function speechLine(ride: Ride) {
-  if (
-    !ride.encounter ||
-    !ride.crowd.performer ||
-    ride.crowd.performer.trajectory ||
-    ride.phase === 'popped'
-  )
-    return;
-  const lines = LINES[ride.encounter.kind];
-
-  return lines?.[Math.floor((ride.time - ride.encounter.began) / 3.4) % lines.length];
 }
 
 function StopMarker({ name, label, current }: { name: string; label: string; current?: boolean }) {
@@ -293,18 +282,14 @@ export function App() {
       }
 
       const activate = actions.current.has('start') || (arcadeEmbedded && actions.current.has('a'));
-      const activeRide =
-        ride.phase !== 'ready' && ride.phase !== 'complete' && ride.phase !== 'popped';
+      const activeRide = ride.phase !== 'ready' && ride.phase !== 'popped';
 
       if (actions.current.has('mute')) toggleSound();
 
       if (activate && ride.phase === 'ready') {
         audio.unlock();
         ride.start();
-      } else if (
-        activate &&
-        (ride.phase === 'complete' || (poppedAt >= 0 && now - poppedAt > 640))
-      ) {
+      } else if (activate && poppedAt >= 0 && now - poppedAt > 640) {
         audio.unlock();
         restart();
       } else if (activeRide) {
@@ -320,10 +305,11 @@ export function App() {
       });
 
       view.draw(dt);
+      audio.performance(ride.phase === 'popped' ? undefined : ride.act?.role);
       audio.travel(ride.phase === 'running', ride.renderTravel);
       for (const cue of ride.cues.splice(0)) audio.cue(cue);
 
-      const speaker = ride.crowd.performer;
+      const speaker = ride.act;
 
       if (bubble.current && speaker) {
         const { left, top } = view.speechPosition(speaker.x, speaker.z);
@@ -366,8 +352,8 @@ export function App() {
     }
   }, [best, hud.score]);
 
-  const ended = hud.phase === 'popped' || hud.phase === 'complete';
-  const result = hud.phase === 'complete' || showResult;
+  const ended = hud.phase === 'popped';
+  const result = showResult;
 
   return (
     <Shell>
@@ -376,7 +362,7 @@ export function App() {
           <Bullet aria-label="4 train">4</Bullet>
           <div>
             <Title>Subway Blob</Title>
-            <Line>Lexington Av Express · Southbound</Line>
+            <Line>Lexington Av Express · {ride.direction === 1 ? 'Southbound' : 'Northbound'}</Line>
           </div>
         </Brand>
         <Best>
@@ -398,13 +384,15 @@ export function App() {
 
       <Game aria-label="Subway Blob simulator">
         <Route aria-label="Train route">
-          {!arcadeMode && <StopMarker label="Previous" name={STATIONS[hud.stop - 1] ?? '—'} />}
+          {!arcadeMode && (
+            <StopMarker label="Previous" name={STATIONS[stationIndex(hud.stop - 1)] ?? '—'} />
+          )}
           <StopMarker
             label={hud.phase === 'running' ? 'Departed' : 'Station'}
-            name={STATIONS[hud.stop]}
+            name={STATIONS[stationIndex(hud.stop)]}
             current
           />
-          <StopMarker label="Next" name={STATIONS[hud.stop + 1] ?? '—'} />
+          <StopMarker label="Next" name={STATIONS[stationIndex(hud.stop + 1)] ?? '—'} />
         </Route>
 
         <Stage>
@@ -419,6 +407,15 @@ export function App() {
           )}
 
           {hud.encounter && <EncounterNotice>{ENCOUNTERS[hud.encounter].name}</EncounterNotice>}
+          {hud.power && (
+            <PowerNotice data-mode={hud.power}>
+              {hud.power === 'crazy'
+                ? 'Crazy Mode'
+                : hud.power === 'fart'
+                  ? 'Gross-out · Stink cloud'
+                  : 'Gross-out · Slime spray'}
+            </PowerNotice>
+          )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}
 
           {!ended && hud.phase !== 'ready' && (
@@ -451,15 +448,13 @@ export function App() {
                     {graphicsError
                       ? '3D view unavailable'
                       : result
-                        ? hud.phase === 'popped'
-                          ? 'You popped'
-                          : 'Route complete'
+                        ? 'You popped'
                         : 'Ride the 4 train'}
                   </PromptTitle>
                   {graphicsError
                     ? 'Enable WebGL in your browser to play.'
                     : result
-                      ? `${STATIONS[hud.stop]} · ${hud.score} ${hud.score === 1 ? 'stop' : 'stops'} survived`
+                      ? `${STATIONS[stationIndex(hud.stop)]} · ${hud.score} ${hud.score === 1 ? 'stop' : 'stops'} survived`
                       : arcadeMode
                         ? 'Joystick to steer'
                         : 'Steer into open gaps before riders crowd you out.'}
@@ -504,7 +499,7 @@ export function App() {
             <GaugeBar
               max={100}
               value={hud.tolerance}
-              data-high={hud.tolerance < 35}
+              data-high={hud.tolerance < 35 || hud.squeeze >= 0.75}
               aria-label="Squeeze tolerance"
             />
           </Gauge>

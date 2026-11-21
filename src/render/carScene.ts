@@ -11,7 +11,7 @@ import {
   CROSS_WIDTH,
   DOORS,
 } from '../sim/car.ts';
-import { STATIONS } from '../sim/route.ts';
+import { STATIONS, stationIndex, travelDirection } from '../sim/route.ts';
 import { addPoster, platformMaterials } from './platformArt';
 import { buildPlatformPeople } from './platformPeople';
 
@@ -315,22 +315,24 @@ export function buildTrack(scene: T.Scene) {
 
   return (stop: number, progress: number, moving: boolean, time: number) => {
     const distance = 58;
-    const departing = moving ? progress * distance : 0;
-    const arriving = departing - distance;
-    const ahead = moving && stop + 1 < STATIONS.length;
+    const direction = travelDirection(stop);
+    const departing = moving ? progress * distance * direction : 0;
+    const arriving = departing - distance * direction;
+    const left = moving ? Math.min(arriving, departing) : departing;
+    const right = moving ? Math.max(arriving, departing) : departing;
 
-    platforms[stop % 2](departing, stop, time);
-    platforms[(stop + 1) % 2](arriving, ahead ? stop + 1 : STATIONS.length, time);
+    platforms[stop % 2](departing, stationIndex(stop), time);
+    platforms[(stop + 1) % 2](arriving, moving ? stationIndex(stop + 1) : STATIONS.length, time);
     track.position.x = departing % 0.75;
-    wall(0, -58, (ahead ? arriving : departing) - 14);
-    wall(1, ahead ? arriving + 14 : departing - 14, departing - 14);
-    wall(2, departing + 14, 58);
+    wall(0, -74, left - 14);
+    wall(1, left + 14, right - 14);
+    wall(2, right + 14, 74);
 
     for (const [index, rib] of ribs.entries()) {
       const x = (index - 11) * 2.15 + (departing % 2.15);
 
       rib.position.x = x;
-      rib.visible = Math.abs(x - departing) > 14.1 && (!ahead || Math.abs(x - arriving) > 14.1);
+      rib.visible = Math.abs(x - departing) > 14.1 && (!moving || Math.abs(x - arriving) > 14.1);
     }
   };
 }

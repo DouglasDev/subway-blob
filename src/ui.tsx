@@ -795,3 +795,35 @@ export const Speech = styled.span`
     font-size: 9px;
   }
 `;
+
+export const PowerNotice = styled.div`
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-3deg);
+  z-index: 1;
+  white-space: nowrap;
+  background: #d6f96e;
+  color: #18290f;
+  border: 2px solid #18290f;
+  border-radius: 5px;
+  box-shadow: 3px 3px 0 #18290f;
+  padding: 7px 12px;
+  font: 800 0.86rem var(--sans);
+  pointer-events: none;
+
+  &[data-mode='crazy'] {
+    background: #f1a6ff;
+    color: #36173a;
+  }
+
+  &[data-mode='vomit'] {
+    background: #a4eb74;
+  }
+
+  html[data-arcade='true'] & {
+    bottom: 7px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+`;

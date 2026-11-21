@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { STATIONS } from '../src/sim/route.ts';
+import { STATIONS, stationIndex, travelDirection } from '../src/sim/route.ts';
 import { ENCOUNTERS, squeezeTolerance } from '../src/sim/encounters.ts';
 import { Fluid } from '../src/sim/fluid.ts';
 import { Grid } from '../src/sim/grid.ts';
@@ -110,7 +110,7 @@ function play(steer: number, frame: number, checkVolume = false) {
     if (ride.phase === 'popped') assert.equal(ride.score, previousScore);
 
     if (checkVolume && Math.floor(ride.time * 20) % 4 === 0) assertVolume(ride.fluid, ride.mask);
-    if (ride.phase === 'popped' || ride.phase === 'complete') break;
+    if (ride.phase === 'popped') break;
   }
 
   return ride;
@@ -164,15 +164,18 @@ test('different render rates produce the same ride outcome', () => {
   assert.deepEqual(slow.fluid.cells, fast.fluid.cells);
 });
 
-test('sustained squeeze drains in 30 seconds, moderate pressure holds, and low squeeze heals', () => {
+test('sustained squeeze drains in 30 seconds, moderate pressure drains slowly, and low squeeze heals', () => {
   let tolerance = 1;
 
   for (let tick = 0; tick < 599; tick++) tolerance = squeezeTolerance(tolerance, 0.75, STEP);
 
   assert.ok(tolerance > 0);
   assert.ok(squeezeTolerance(tolerance, 0.75, STEP) < 1e-10);
-  assert.equal(squeezeTolerance(0.5, 0.65, STEP), 0.5);
-  assert.ok(squeezeTolerance(0.5, 0.65, STEP, true) < 0.5);
+  const moderate = squeezeTolerance(0.5, 0.65, STEP);
+
+  assert.ok(moderate < 0.5);
+  assert.ok(moderate > squeezeTolerance(0.5, 0.75, STEP));
+  assert.ok(squeezeTolerance(0.5, 0.65, STEP, true) < moderate);
 
   for (let tick = 0; tick < 300; tick++) tolerance = squeezeTolerance(tolerance, 0, STEP);
 
@@ -193,7 +196,7 @@ test('a no-fit tick keeps full volume and allows steering before the crowd retri
 
   ride.tick({ x: 1, z: 0 });
   assert.equal(ride.phase, 'arriving');
-  assert.equal(ride.squeeze, 1);
+  assert.ok(ride.squeeze > 0 && ride.squeeze < 1);
   assert.ok(ride.tolerance < 1);
   assert.ok(ride.fluid.x > before);
   assertVolume(ride.fluid, ride.mask);
@@ -222,19 +225,63 @@ test('AC grows the blob and the next door opening restores the standard volume',
   assertVolume(ride.fluid, ride.mask);
 });
 
-test('seeded encounters replay, leave the first three stops quiet, and reserve a two-stop cameo', () => {
+test('seeded encounters replay and the three acts appear early', () => {
   const a = new Ride(22);
   const b = new Ride(22);
 
   assert.deepEqual([...a.schedule], [...b.schedule]);
-  assert.notDeepEqual([...a.schedule], [...new Ride(23).schedule]);
+  assert.notDeepEqual([...a.schedule], [...new Ride(12071).schedule]);
   assert.equal(a.schedule.size, Object.keys(ENCOUNTERS).length);
+  assert.ok(!a.schedule.has(0));
 
-  for (const [stop, kind] of a.schedule) {
-    assert.ok(stop >= 3);
-    assert.ok(stop + ENCOUNTERS[kind].stops < STATIONS.length);
-    if (kind === 'takes') assert.ok(!a.schedule.has(stop + 1));
+  assert.deepEqual(
+    new Set([a.schedule.get(1), a.schedule.get(2), a.schedule.get(4)]),
+    new Set(['acrobat', 'musician', 'prank']),
+  );
+
+  assert.equal(a.schedule.get(5), 'takes');
+  assert.ok(!a.schedule.has(6));
+});
+
+test('the train reverses at both terminals and keeps counting stops', () => {
+  const length = STATIONS.length;
+
+  assert.equal(stationIndex(length - 1), length - 1);
+  assert.equal(stationIndex(length), length - 2);
+  assert.equal(travelDirection(length - 1), -1);
+  assert.equal(stationIndex((length - 1) * 2), 0);
+  assert.equal(travelDirection((length - 1) * 2), 1);
+  const ride = new Ride();
+
+  ride.stop = length - 1;
+  ride.score = length - 1;
+  ride.start();
+
+  for (let tick = 0; tick < 600 && ride.stop < length; tick++) ride.tick({ x: 0, z: 0 });
+
+  assert.equal(ride.stop, length);
+  assert.equal(ride.station, length - 2);
+  assert.equal(ride.score, length);
+  assert.equal(ride.phase, 'arriving');
+});
+
+test('the opening ride shows all three acts and a series of different SubwayTakes', () => {
+  const ride = new Ride(12071);
+  const acts = new Set();
+  const takes = new Set();
+
+  ride.start();
+
+  for (let tick = 0; tick < 3000 && ride.stop < 7; tick++) {
+    ride.tick({ x: 0, z: 0 });
+    if (ride.act) acts.add(ride.act.role);
+    if (ride.encounter?.kind === 'takes' && ride.speech?.startsWith('Rider:'))
+      takes.add(ride.speech);
   }
+
+  for (const kind of ['acrobat', 'musician', 'prank']) assert.ok(acts.has(kind));
+  assert.ok(takes.size >= 7);
+  assert.ok(ride.tolerance < 0.9);
 });
 
 test('one pickup is spawned per stop, full slots leave it in place, and use frees a slot', () => {
@@ -319,7 +366,7 @@ test('performers shift the nearby crowd and queue to exit when the encounter exp
   for (let step = 0; step < 40; step++)
     crowd.update(STEP, step * STEP, ride.fluid, car.grid, car.fixtures);
 
-  assert.ok(neighbor.z > 0.3);
+  assert.ok(neighbor.z < -0.45);
   crowd.endEncounter();
   assert.equal(crowd.performer, undefined);
   assert.ok(actor.wantsExit);
