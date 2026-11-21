@@ -1,0 +1,11 @@
+# Audio credits
+
+The following NYC field recordings were obtained from their public Freesound previews. The source pages mark each recording [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The game bundles the edited mono MP3s and plays them offline.
+
+| Cue               | Recording                                                                                                | Edit                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Train motion      | [Subway ride NYC by e.zeta](https://freesound.org/people/e.zeta/sounds/825939/)                          | 00:05.50–00:11.00, filtered for rolling noise and faded at the loop edges                 |
+| Door announcement | [NYC Subway train PA by carroll27](https://freesound.org/people/carroll27/sounds/187315/)                | 00:02.77–00:05.08, cropped to the closing-door warning after the source's station callout |
+| Door chime        | [Subway Doors Closing Interior 01 by swelltoe77](https://freesound.org/people/swelltoe77/sounds/160517/) | 00:06.51–00:08.13, cropped around the recorded two-tone chime                             |
+
+The character, pickup, and pop cues are original synthesized effects.
