@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS, stationIndex } from './sim/route.ts';
@@ -6,6 +6,7 @@ import { ENCOUNTERS } from './sim/encounters.ts';
 import { COOL_POINTS, POWERS } from './sim/powers.ts';
 import { ACROBAT_MOVES, MUSICIAN_SONGS, PRANKS } from './sim/guestContent.ts';
 import { RideAudio } from './audio';
+import { MovementPad, powerSlotLabel, TouchControls } from './TouchControls';
 import { Ride } from './sim/ride.ts';
 import type { Phase } from './sim/ride.ts';
 import {
@@ -36,8 +37,6 @@ import {
   Overlay,
   SoundButton,
   Speech,
-  Pad,
-  PadButton,
   Prompt,
   PromptTitle,
   PowerNotice,
@@ -72,12 +71,19 @@ function soundMuted() {
   }
 }
 
-const directions = [
-  { id: 'up', icon: '↑', label: 'Move away from camera' },
-  { id: 'left', icon: '←', label: 'Move left' },
-  { id: 'down', icon: '↓', label: 'Move toward camera' },
-  { id: 'right', icon: '→', label: 'Move right' },
-];
+const touchQuery = window.matchMedia(
+  '(max-width: 730px), (pointer: coarse), (orientation: landscape) and (max-height: 500px) and (max-width: 950px)',
+);
+
+function subscribeToTouchLayout(update: () => void) {
+  touchQuery.addEventListener('change', update);
+
+  return () => touchQuery.removeEventListener('change', update);
+}
+
+function getTouchLayout() {
+  return !arcadeMode && touchQuery.matches;
+}
 
 const keyDirection: Record<string, string> = {
   KeyA: 'left',
@@ -145,6 +151,7 @@ function StopMarker({ name, label, current }: { name: string; label: string; cur
 }
 
 export function App() {
+  const touchLayout = useSyncExternalStore(subscribeToTouchLayout, getTouchLayout);
   const [ride, setRide] = useState(newRide);
   const [hud, setHud] = useState(() => snapshot(ride));
   const [best, setBest] = useState(loadBest);
@@ -381,14 +388,47 @@ export function App() {
   const ended = hud.phase === 'popped';
   const result = showResult;
 
+  function setTouchDirection(pointer: number, direction?: string) {
+    if (direction) touches.current.set(pointer, direction);
+    else touches.current.delete(pointer);
+  }
+
+  const startButton = !graphicsError && (hud.phase === 'ready' || result) && (
+    <Button
+      type="button"
+      data-touch={touchLayout}
+      onClick={() => {
+        audio.unlock();
+        if (result) restart();
+        else ride.start();
+      }}
+    >
+      {arcadeMode ? (result ? 'A · Retry' : 'A · Start') : result ? 'Ride again' : 'Start ride'}
+    </Button>
+  );
+  const soundButton = (
+    <SoundButton
+      type="button"
+      data-touch={touchLayout}
+      onClick={toggleSound}
+      aria-label={sound ? 'Unmute sound' : 'Mute sound'}
+      aria-pressed={sound}
+    >
+      {arcadeMode ? '2 · ' : ''}
+      {sound ? 'Muted' : 'Sound'}
+    </SoundButton>
+  );
+
   return (
-    <Shell>
-      <Header>
+    <Shell data-touch={touchLayout}>
+      <Header data-touch={touchLayout}>
         <Brand>
           <Bullet aria-label="4 train">4</Bullet>
           <div>
             <Title>Subway Blob</Title>
-            <Line>Lexington Av Express · {ride.direction === 1 ? 'Southbound' : 'Northbound'}</Line>
+            <Line data-touch={touchLayout}>
+              Lexington Av Express · {ride.direction === 1 ? 'Southbound' : 'Northbound'}
+            </Line>
           </div>
         </Brand>
         <Best>
@@ -397,19 +437,11 @@ export function App() {
             {best} {best === 1 ? 'stop' : 'stops'}
           </BestValue>
         </Best>
-        <SoundButton
-          type="button"
-          onClick={toggleSound}
-          aria-label={sound ? 'Unmute sound' : 'Mute sound'}
-          aria-pressed={sound}
-        >
-          {arcadeMode ? '2 · ' : ''}
-          {sound ? 'Muted' : 'Sound'}
-        </SoundButton>
+        {!touchLayout && soundButton}
       </Header>
 
-      <Game aria-label="Subway Blob simulator">
-        <Route aria-label="Train route">
+      <Game aria-label="Subway Blob simulator" data-touch={touchLayout}>
+        <Route aria-label="Train route" data-touch={touchLayout}>
           {!arcadeMode && (
             <StopMarker label="Previous" name={STATIONS[stationIndex(hud.stop - 1)] ?? '—'} />
           )}
@@ -421,7 +453,7 @@ export function App() {
           <StopMarker label="Next" name={STATIONS[stationIndex(hud.stop + 1)] ?? '—'} />
         </Route>
 
-        <Stage>
+        <Stage data-touch={touchLayout}>
           <View ref={canvas} aria-label="3D view of the subway car and your blob" />
           <Status data-doors={hud.phase === 'doors' || hud.phase === 'closing'} role="status">
             {phaseText[hud.phase]}
@@ -444,31 +476,13 @@ export function App() {
           )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}
 
-          {!ended && hud.phase !== 'ready' && (
-            <Pad aria-label="Movement controls">
-              {directions.map(({ id, icon, label }) => (
-                <PadButton
-                  key={id}
-                  type="button"
-                  data-dir={id}
-                  aria-label={label}
-                  onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    touches.current.set(event.pointerId, id);
-                  }}
-                  onLostPointerCapture={(event) => touches.current.delete(event.pointerId)}
-                  onPointerUp={(event) => touches.current.delete(event.pointerId)}
-                  onPointerCancel={(event) => touches.current.delete(event.pointerId)}
-                >
-                  {icon}
-                </PadButton>
-              ))}
-            </Pad>
+          {arcadeMode && !ended && hud.phase !== 'ready' && (
+            <MovementPad cabinet onDirection={setTouchDirection} />
           )}
 
           {(graphicsError || hud.phase === 'ready' || result) && (
-            <Overlay>
-              <Card>
+            <Overlay data-touch={touchLayout}>
+              <Card data-touch={touchLayout}>
                 <Prompt>
                   <PromptTitle>
                     {graphicsError
@@ -485,39 +499,22 @@ export function App() {
                         ? 'Joystick to steer'
                         : 'Steer into open gaps before riders crowd you out.'}
                 </Prompt>
-                {!graphicsError && (
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      audio.unlock();
-                      if (result) restart();
-                      else ride.start();
-                    }}
-                  >
-                    {arcadeMode
-                      ? result
-                        ? 'A · Retry'
-                        : 'A · Start'
-                      : result
-                        ? 'Ride again'
-                        : 'Start ride'}
-                  </Button>
-                )}
+                {!touchLayout && startButton}
               </Card>
             </Overlay>
           )}
         </Stage>
 
-        <Dashboard>
-          <Metric>
+        <Dashboard data-touch={touchLayout}>
+          <Metric data-touch={touchLayout}>
             <MetricName>{arcadeMode ? 'Stops' : 'Stops survived'}</MetricName>
             <MetricValue>{String(hud.score).padStart(2, '0')}</MetricValue>
           </Metric>
-          <Metric>
+          <Metric data-touch={touchLayout}>
             <MetricName>{arcadeMode ? 'Riders' : 'Riders in car'}</MetricName>
             <MetricValue>{String(hud.onboard).padStart(2, '0')}</MetricValue>
           </Metric>
-          <Gauge>
+          <Gauge data-touch={touchLayout}>
             <GaugeCaption>
               <MetricName>{arcadeMode ? 'Tolerance' : 'Squeeze tolerance'}</MetricName>
               <GaugeValue>{hud.tolerance}%</GaugeValue>
@@ -529,34 +526,44 @@ export function App() {
               aria-label="Squeeze tolerance"
             />
           </Gauge>
-          <Controls>
-            <Keys>W A S D</Keys>
-            <Keys>↑ ← ↓ →</Keys> Move
-          </Controls>
+          {!touchLayout && (
+            <Controls>
+              <Keys>W A S D</Keys>
+              <Keys>↑ ← ↓ →</Keys> Move
+            </Controls>
+          )}
         </Dashboard>
 
-        <Inventory aria-label="Power-up slots">
-          {hud.inventory.map((power, slot) => {
-            const key = (arcadeMode ? ['A', 'B'] : ['Z', 'X'])[slot];
+        {touchLayout ? (
+          <TouchControls
+            inventory={hud.inventory}
+            disabled={graphicsError || ended || hud.phase === 'ready'}
+            onDirection={setTouchDirection}
+            onPower={(slot) => ride.usePower(slot)}
+          >
+            {startButton}
+            {soundButton}
+          </TouchControls>
+        ) : (
+          <Inventory aria-label="Power-up slots">
+            {hud.inventory.map((power, slot) => {
+              const key = (arcadeMode ? ['A', 'B'] : ['Z', 'X'])[slot];
 
-            return (
-              <InventorySlot
-                key={slot}
-                type="button"
-                disabled={!power || ended}
-                aria-label={
-                  power
-                    ? `Use ${POWERS[power].name} in slot ${slot + 1}${power === 'cool' ? `. Restore up to ${COOL_POINTS} squeeze tolerance points` : ''}`
-                    : `Empty power-up slot ${slot + 1}`
-                }
-                onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
-              >
-                <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
-                {power === 'cool' && ` · +${COOL_POINTS} tolerance`}
-              </InventorySlot>
-            );
-          })}
-        </Inventory>
+              return (
+                <InventorySlot
+                  key={slot}
+                  type="button"
+                  disabled={!power || ended}
+                  aria-label={powerSlotLabel(power, slot)}
+                  onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
+                >
+                  <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
+                  {power === 'cool' && ` · +${COOL_POINTS} tolerance`}
+                </InventorySlot>
+              );
+            })}
+          </Inventory>
+        )}
       </Game>
     </Shell>
   );

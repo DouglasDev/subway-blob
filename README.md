@@ -18,7 +18,7 @@ Open the loopback URL printed by Vite in a browser with WebGL2.
 | Platform          | Steer             | Start or retry        | Use the two held pickups | Toggle sound     |
 | ----------------- | ----------------- | --------------------- | ------------------------ | ---------------- |
 | Desktop           | WASD or arrows    | Enter or Start ride   | Z and X                  | M or Sound       |
-| Standalone mobile | Directional pad   | Start ride            | Labeled slot buttons     | Sound            |
+| Standalone mobile | Bottom-left D-pad | Start ride            | Bottom-right A and B     | Bottom Sound     |
 | RCade             | Player 1 joystick | A or one-player start | A and B                  | Two-player start |
 
 RCade’s web player maps the virtual controls to WASD, F, G, 1, and 2 by default. Add `?cabinet` locally to preview the 336 × 262 layout. The 4 train has its own best score. On the cabinet the score lasts for the current game session.

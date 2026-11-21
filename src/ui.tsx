@@ -9,6 +9,18 @@ export const Shell = styled.main`
     padding: 15px 14px 12px;
   }
 
+  &[data-touch='true'] {
+    display: flex;
+    flex-direction: column;
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+
+    @media (orientation: landscape) and (max-height: 500px) {
+      padding-block: 4px max(4px, env(safe-area-inset-bottom));
+    }
+  }
+
   html[data-arcade='true'] & {
     width: min(100%, 336px);
     height: min(100svh, 262px);
@@ -28,6 +40,12 @@ export const Header = styled.header`
   @media (max-width: 480px) {
     gap: 8px;
     margin-bottom: 12px;
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      margin-bottom: 5px;
+    }
   }
 
   html[data-arcade='true'] & {
@@ -109,6 +127,12 @@ export const Line = styled.div`
     letter-spacing: 0.05em;
   }
 
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      display: none;
+    }
+  }
+
   html[data-arcade='true'] & {
     display: none;
   }
@@ -162,6 +186,12 @@ export const Game = styled.section`
   background: #182320;
   box-shadow: 0 20px 55px #0b16148c;
 
+  &[data-touch='true'] {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+  }
+
   html[data-arcade='true'] & {
     display: flex;
     flex: 1;
@@ -185,6 +215,14 @@ export const Route = styled.div`
     padding-inline: 11px;
   }
 
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      --route-dot-display: none;
+      --stop-gap: 2px;
+      padding-block: 3px;
+    }
+  }
+
   html[data-arcade='true'] & {
     grid-template-columns: 1.25fr 1fr;
     flex: none;
@@ -196,7 +234,7 @@ export const Route = styled.div`
 export const Stop = styled.div`
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: var(--stop-gap, 4px);
   color: #bac6b8;
   font-size: clamp(0.73rem, 1.3vw, 0.91rem);
   text-align: center;
@@ -237,7 +275,7 @@ export const RouteLabel = styled.span`
 export const RouteDot = styled.span`
   height: 13px;
   position: relative;
-  display: grid;
+  display: var(--route-dot-display, grid);
   place-items: center;
 
   &::before {
@@ -280,6 +318,20 @@ export const Stage = styled.div`
 
   @media (max-width: 650px) {
     height: clamp(245px, calc(100svh - 330px), 620px);
+  }
+
+  &[data-touch='true'] {
+    flex: 1;
+    height: auto;
+    min-height: 184px;
+
+    @media (max-height: 650px) {
+      min-height: 140px;
+    }
+
+    @media (orientation: landscape) and (max-height: 500px) {
+      min-height: 102px;
+    }
   }
 
   html[data-arcade='true'] & {
@@ -365,6 +417,18 @@ export const Overlay = styled.div`
   padding: 18px;
   background: linear-gradient(0deg, #101a16c7 0%, transparent 50%);
 
+  @media (max-width: 360px) and (max-height: 650px) {
+    &[data-touch='true'] {
+      padding: 8px;
+    }
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      padding: 8px;
+    }
+  }
+
   html[data-arcade='true'] & {
     padding: 5px;
   }
@@ -387,6 +451,12 @@ export const Card = styled.div`
   @media (max-width: 440px) {
     padding: 12px;
     gap: 9px;
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      padding: 7px 11px;
+    }
   }
 
   html[data-arcade='true'] & {
@@ -436,6 +506,12 @@ export const Button = styled.button`
     background: #def3b3;
   }
 
+  &[data-touch='true'] {
+    min-height: 44px;
+    padding-inline: 16px;
+    border-radius: 22px;
+  }
+
   html[data-arcade='true'] & {
     min-height: 25px;
     padding: 4px 7px;
@@ -451,6 +527,10 @@ export const Dashboard = styled.div`
   border-top: 1px solid #4a5a4d;
 
   @media (max-width: 730px) {
+    grid-template-columns: 1fr 1fr minmax(100px, 1.35fr);
+  }
+
+  &[data-touch='true'] {
     grid-template-columns: 1fr 1fr minmax(100px, 1.35fr);
   }
 
@@ -470,6 +550,18 @@ export const Metric = styled.div`
   @media (max-width: 730px) {
     min-width: 0;
     padding-inline: 10px;
+  }
+
+  @media (max-width: 360px) and (max-height: 650px) {
+    &[data-touch='true'] {
+      padding-block: 7px;
+    }
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      padding-block: 3px;
+    }
   }
 
   html[data-arcade='true'] & {
@@ -512,6 +604,18 @@ export const Gauge = styled.div`
 
   @media (max-width: 730px) {
     padding-inline: 10px;
+  }
+
+  @media (max-width: 360px) and (max-height: 650px) {
+    &[data-touch='true'] {
+      padding-block: 7px;
+    }
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    &[data-touch='true'] {
+      padding-block: 3px;
+    }
   }
 
   html[data-arcade='true'] & {
@@ -605,68 +709,6 @@ export const Keys = styled.kbd`
   font: 0.68rem var(--mono);
 `;
 
-export const Pad = styled.div`
-  display: none;
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  grid-template-columns: repeat(3, 44px);
-  grid-template-rows: repeat(2, 44px);
-  gap: 4px;
-
-  @media (pointer: coarse), (max-width: 730px) {
-    display: grid;
-  }
-
-  html[data-arcade='true'] & {
-    @media (pointer: fine) {
-      display: none;
-    }
-    bottom: 4px;
-    left: 4px;
-    grid-template-columns: repeat(3, 27px);
-    grid-template-rows: repeat(2, 27px);
-    gap: 2px;
-  }
-`;
-
-export const PadButton = styled.button`
-  border: 1px solid #789182;
-  background: #192922e8;
-  border-radius: 4px;
-  color: #f1f2df;
-  font-size: 1.1rem;
-  touch-action: none;
-  user-select: none;
-
-  &[data-dir='up'] {
-    grid-column: 2;
-  }
-
-  &[data-dir='left'] {
-    grid-row: 2;
-    grid-column: 1;
-  }
-
-  &[data-dir='down'] {
-    grid-row: 2;
-    grid-column: 2;
-  }
-
-  &[data-dir='right'] {
-    grid-row: 2;
-    grid-column: 3;
-  }
-
-  &:active {
-    background: #526649;
-  }
-
-  html[data-arcade='true'] & {
-    font-size: 12px;
-  }
-`;
-
 export const SoundButton = styled.button`
   min-height: 42px;
   padding: 5px 9px;
@@ -681,6 +723,13 @@ export const SoundButton = styled.button`
     min-height: 38px;
     padding: 4px 6px;
     font-size: 0.63rem;
+  }
+
+  &[data-touch='true'] {
+    min-width: 64px;
+    min-height: 44px;
+    padding-inline: 12px;
+    border-radius: 22px;
   }
 
   html[data-arcade='true'] & {
