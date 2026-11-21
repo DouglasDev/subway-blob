@@ -1,0 +1,25 @@
+:root {
+  --sans: 'Inter', 'Aptos', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'Cascadia Mono', ui-monospace, monospace;
+  font-family: var(--sans);
+  color: #f1efdb;
+  background: #14201d;
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 300px;
+  min-height: 100vh;
+}
+
+button:focus-visible {
+  outline: 2px solid #f6efdb;
+  outline-offset: 3px;
+}
