@@ -3,6 +3,7 @@ import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS, stationIndex } from './sim/route.ts';
 import { ENCOUNTERS, POWER_NAMES } from './sim/encounters.ts';
+import { ACROBAT_MOVES, MUSICIAN_SONGS, PRANKS } from './sim/guestContent.ts';
 import { RideAudio } from './audio';
 import { Ride } from './sim/ride.ts';
 import type { Phase } from './sim/ride.ts';
@@ -117,6 +118,9 @@ function snapshot(ride: Ride) {
     encounter: ride.encounter?.kind,
     inventory: [...ride.inventory],
     speech: ride.speech,
+    guestPressure: ride.guestPressure,
+    shield: ride.shieldUntil > ride.time,
+    variant: ride.encounter?.variant ?? 0,
     squeeze: ride.squeeze,
     power: ride.animation && ride.animation.until > ride.time ? ride.animation.cue : undefined,
   };
@@ -305,7 +309,12 @@ export function App() {
       });
 
       view.draw(dt);
-      audio.performance(ride.phase === 'popped' ? undefined : ride.act?.role);
+
+      audio.performance(
+        ride.phase === 'popped' ? undefined : ride.act?.role,
+        ride.encounter?.variant,
+      );
+
       audio.travel(ride.phase === 'running', ride.renderTravel);
       for (const cue of ride.cues.splice(0)) audio.cue(cue);
 
@@ -352,6 +361,14 @@ export function App() {
     }
   }, [best, hud.score]);
 
+  const actTitle =
+    hud.encounter === 'acrobat'
+      ? ACROBAT_MOVES[hud.variant]
+      : hud.encounter === 'musician'
+        ? MUSICIAN_SONGS[hud.variant]
+        : hud.encounter === 'prank'
+          ? PRANKS[hud.variant].name
+          : undefined;
   const ended = hud.phase === 'popped';
   const result = showResult;
 
@@ -406,14 +423,20 @@ export function App() {
             </Flow>
           )}
 
-          {hud.encounter && <EncounterNotice>{ENCOUNTERS[hud.encounter].name}</EncounterNotice>}
-          {hud.power && (
-            <PowerNotice data-mode={hud.power}>
-              {hud.power === 'crazy'
-                ? 'Crazy Mode'
-                : hud.power === 'fart'
-                  ? 'Gross-out · Stink cloud'
-                  : 'Gross-out · Slime spray'}
+          {hud.encounter && (
+            <EncounterNotice data-danger={hud.guestPressure > 0}>
+              {ENCOUNTERS[hud.encounter].name}
+              {actTitle ? ' · ' + actTitle : ''}
+              {hud.guestPressure > 0 && ' · Too close'}
+            </EncounterNotice>
+          )}
+          {(hud.power || hud.shield) && !ended && (
+            <PowerNotice data-mode={hud.power ?? 'shield'}>
+              {hud.power === 'fart'
+                ? 'Gross-out · Stink cloud'
+                : hud.power === 'vomit'
+                  ? 'Gross-out · Slime spray'
+                  : POWER_NAMES[hud.power ?? 'shield']}
             </PowerNotice>
           )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}

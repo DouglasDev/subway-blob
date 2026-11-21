@@ -1,5 +1,6 @@
 import * as T from 'three';
 import type { Ride } from '../sim/ride.ts';
+import { buildGags, buildInstruments } from './gags';
 
 function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
   const mesh = new T.Mesh(geometry, new T.MeshStandardMaterial({ color, roughness: 0.59 }));
@@ -22,27 +23,9 @@ export function buildRideObjects(scene: T.Scene) {
   const stageMark = part(scene, new T.RingGeometry(0.44, 0.5, 20), 0xffc963);
 
   stageMark.rotation.x = -Math.PI / 2;
-  const gag = new T.Group();
-  const pigeon = part(gag, new T.SphereGeometry(0.23, 10, 7), 0xb4a4cb);
-
-  pigeon.scale.set(1.35, 0.9, 0.76);
-  part(gag, new T.SphereGeometry(0.11, 8, 6), 0x71838a).position.set(0.22, 0.16, 0);
-  part(gag, new T.ConeGeometry(0.06, 0.12, 6), 0xffab55).position.set(0.32, 0.15, 0);
-  const wing = part(gag, new T.SphereGeometry(0.19, 7, 6), 0x9366c5);
-
-  wing.position.set(-0.09, 0.04, 0.17);
-  wing.scale.set(1.55, 0.39, 0.8);
-  const crown = part(gag, new T.CylinderGeometry(0.086, 0.11, 0.09, 7), 0xf4b84b);
-
-  crown.position.set(0.22, 0.28, 0);
-  const caseLid = part(scene, new T.BoxGeometry(0.48, 0.23, 0.29), 0x9d6099);
-  const instrument = new T.Group();
-
-  part(instrument, new T.BoxGeometry(0.38, 0.19, 0.13), 0xc2944f);
-  part(instrument, new T.BoxGeometry(0.31, 0.055, 0.14), 0xf4dfb6).position.y = 0.052;
+  const updateGags = buildGags(scene);
+  const updateInstruments = buildInstruments(scene);
   const mic = part(scene, new T.BoxGeometry(0.105, 0.055, 0.045), 0xeeb641);
-
-  scene.add(gag, instrument);
 
   function makeLuggage(kind: 'bike' | 'suitcase', id: number) {
     const group = new T.Group();
@@ -99,7 +82,7 @@ export function buildRideObjects(scene: T.Scene) {
       jewel.rotation.set(time, time * 2.4, 0.2);
 
       (jewel.material as T.MeshStandardMaterial).color.setHex(
-        pickup.power === 'crazy' ? 0xb880fe : 0xffd061,
+        { crazy: 0xd794ff, gross: 0xffd061, cool: 0x8de8ff, shield: 0x70a8ff }[pickup.power],
       );
 
       halo.position.y = jewel.position.y;
@@ -132,35 +115,22 @@ export function buildRideObjects(scene: T.Scene) {
     }
 
     const act = actor?.role;
+    const elapsed = time - (ride.encounter?.began ?? 0);
+    const variant = ride.encounter?.variant;
 
-    gag.visible = act === 'prank';
-    caseLid.visible = gag.visible;
-    instrument.visible = act === 'musician';
+    updateGags(act === 'prank' ? variant : undefined, actor?.x, actor?.z, elapsed);
+    updateInstruments(act === 'musician' ? variant : undefined, actor?.x, actor?.z, elapsed);
     mic.visible = act === 'takes';
-    stageMark.visible = act === 'acrobat' || instrument.visible || gag.visible;
+    stageMark.visible = !!actor;
 
-    if (!actor || !ride.encounter) return;
+    if (!actor) return;
 
-    const elapsed = time - ride.encounter.began;
-    const bit = elapsed % 7.2;
-    const flight = Math.min(1, Math.max(0, (bit - 1.15) / 1.05));
-    const tuck = Math.min(1, Math.max(0, (7.15 - bit) / 1.28));
-
-    gag.position.set(
-      actor.x + 0.2 + Math.sin(bit * 2.0) * 1.1 * flight,
-      0.32 + (1.14 + Math.abs(Math.sin(bit * 3)) * 0.56) * flight,
-      actor.z + 0.35 + Math.sin(bit * 1.7) * 0.42 * flight,
-    );
-
-    gag.scale.setScalar(0.22 + 1.68 * flight * tuck);
-    gag.rotation.set(Math.sin(bit * 2) * 0.43, bit * 4 * flight, Math.sin(bit * 3) * 0.36);
-    wing.rotation.z = Math.sin(bit * 23) * 0.95;
-    caseLid.position.set(actor.x - 0.1, 0.15, actor.z + 0.57);
-    caseLid.rotation.z = Math.sin(bit * 2.7) * 0.3;
-    instrument.position.set(actor.x, 1.09 + Math.sin(elapsed * 8) * 0.06, actor.z + 0.2);
-    instrument.rotation.z = Math.sin(elapsed * 4.1) * 0.18;
     mic.position.set(actor.x + 0.21, 1.31, actor.z + 0.18);
     stageMark.position.set(actor.x, 0.018, actor.z);
-    stageMark.scale.setScalar(1 + 0.18 * Math.sin(elapsed * 8));
+    stageMark.scale.setScalar(1 + 0.15 * Math.sin(elapsed * 8) + ride.guestPressure * 0.16);
+
+    (stageMark.material as T.MeshStandardMaterial).color.setHex(
+      ride.guestPressure > 0 ? 0xf17340 : 0xffc963,
+    );
   };
 }

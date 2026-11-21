@@ -8,7 +8,13 @@ const music = {
 
 const performances = {
   acrobat: new URL('./assets/showtime.mp3', import.meta.url).href,
-  musician: new URL('./assets/off-key.mp3', import.meta.url).href,
+  musician: [
+    new URL('./assets/off-key.mp3', import.meta.url).href,
+    new URL('./assets/crooked-waltz.mp3', import.meta.url).href,
+    new URL('./assets/tin-can-blues.mp3', import.meta.url).href,
+    new URL('./assets/cardboard-tango.mp3', import.meta.url).href,
+    new URL('./assets/wrong-stop.mp3', import.meta.url).href,
+  ],
   prank: new URL('./assets/pigeon.mp3', import.meta.url).href,
 };
 
@@ -35,6 +41,14 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
     { at: 0, length: 0.15, pitch: 660 },
     { at: 0.1, length: 0.22, pitch: 960 },
   ],
+  cool: [
+    { at: 0, length: 0.41, pitch: 680, end: 1046 },
+    { at: 0.14, length: 0.46, pitch: 920, end: 1560 },
+  ],
+  shield: [
+    { at: 0, length: 0.4, pitch: 280, end: 505 },
+    { at: 0.13, length: 0.6, pitch: 420, end: 654 },
+  ],
   pop: [{ at: 0, length: 0.24, pitch: 325, end: 48, shape: 'triangle' }],
 };
 
@@ -44,7 +58,7 @@ export class RideAudio {
   private readonly chime = clip(music.chime, 0.61);
   private readonly performanceClips = {
     acrobat: clip(performances.acrobat, 0.59, true),
-    musician: clip(performances.musician, 0.52, true),
+    musician: performances.musician.map((url) => clip(url, 0.54, true)),
     prank: clip(performances.prank, 0.61, true),
   };
   private readonly effects = {
@@ -56,7 +70,9 @@ export class RideAudio {
     this.roll,
     this.announcement,
     this.chime,
-    ...Object.values(this.performanceClips),
+    this.performanceClips.acrobat,
+    ...this.performanceClips.musician,
+    this.performanceClips.prank,
     ...Object.values(this.effects),
   ];
   private context?: AudioContext;
@@ -106,11 +122,13 @@ export class RideAudio {
     else this.roll.pause();
   }
 
-  performance(kind: Encounter | undefined) {
+  performance(kind: Encounter | undefined, variant = 0) {
     const active =
-      kind === 'acrobat' || kind === 'musician' || kind === 'prank'
-        ? this.performanceClips[kind]
-        : undefined;
+      kind === 'musician'
+        ? this.performanceClips.musician[variant]
+        : kind === 'acrobat' || kind === 'prank'
+          ? this.performanceClips[kind]
+          : undefined;
 
     if (active === this.activePerformance) return;
 

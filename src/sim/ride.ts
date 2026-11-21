@@ -4,15 +4,15 @@ import type { Location } from './crowd.ts';
 import {
   ENCOUNTERS,
   ENCOUNTER_CYCLE,
-  PRANK_LINES,
-  TAKES,
-  WEIRD_LINES,
+  POWERS,
   encounterSchedule,
+  guestProximity,
   seededRandom,
   squeezeTolerance,
 } from './encounters.ts';
-import type { Cue, Encounter, Power } from './encounters.ts';
+import type { Cue, Encounter, Power, PowerEffect } from './encounters.ts';
 import { Fluid } from './fluid.ts';
+import { guestContent } from './guestContent.ts';
 import { stationIndex, travelDirection } from './route.ts';
 
 export const STEP = 1 / 20;
@@ -38,8 +38,16 @@ export class Ride {
   readonly schedule: Map<number, Encounter>;
   readonly cues: Cue[] = [];
   pickup: (Location & { power: Power; y: number }) | null = null;
-  encounter: { kind: Encounter; expires: number; began: number; takeOffset: number } | null = null;
-  animation: { cue: 'crazy' | 'fart' | 'vomit'; began: number; until: number } | null = null;
+  encounter: {
+    kind: Encounter;
+    expires: number;
+    began: number;
+    variant: number;
+    dialogueAt: number;
+    line?: string;
+    greeted: boolean;
+  } | null = null;
+  animation: { cue: PowerEffect; began: number; until: number } | null = null;
   phase: Phase = 'ready';
   stop = 0;
   score = 0;
@@ -49,8 +57,12 @@ export class Ride {
   travel = 0;
   tolerance = 1;
   squeeze = 0;
+  guestPressure = 0;
+  shieldUntil = 0;
   private rawSqueeze = 0;
   private readonly random: () => number;
+  private readonly guestRandom: () => number;
+  private readonly guests: ReturnType<typeof guestContent>;
   private readonly actions = new Set<0 | 1>();
   private waitingEncounter?: Encounter;
   private spawned = false;
@@ -58,7 +70,9 @@ export class Ride {
 
   constructor(readonly seed = 12071) {
     this.random = seededRandom(seed ^ 0x6c8e9cf5);
-    this.schedule = encounterSchedule(0, this.random);
+    this.guestRandom = seededRandom(seed ^ 0x32c47ae1);
+    this.schedule = encounterSchedule(0, this.guestRandom);
+    this.guests = guestContent(seededRandom(seed ^ 0x42dd4ed9));
     this.crowd = new Crowd(seed);
     this.crowd.occupy(this.car.grid, this.mask, 0);
     this.fluid.step(this.mask);
@@ -84,23 +98,41 @@ export class Ride {
   }
 
   get speech() {
+    return this.act && this.phase !== 'popped' ? this.encounter?.line : undefined;
+  }
+
+  private updateGuest() {
     const { encounter, act } = this;
 
-    if (!encounter || !act || this.phase === 'popped') return undefined;
+    this.guestPressure = 0;
 
-    const display = Math.max(0, Math.floor((this.time - encounter.began - 0.5) / 2.7));
+    if (!encounter || !act) return;
 
-    switch (encounter.kind) {
-      case 'takes':
-        return display === 0
-          ? 'Kareem: What’s your take?'
-          : 'Rider: ' + TAKES[(encounter.takeOffset + display - 1) % TAKES.length];
-      case 'prank':
-        return PRANK_LINES[Math.floor((this.time - encounter.began) / 3) % PRANK_LINES.length];
-      case 'weird':
-        return WEIRD_LINES[display % WEIRD_LINES.length];
-      default:
-        return undefined;
+    const { centers } = this.car.grid;
+    let closest = Infinity;
+
+    for (const id of this.fluid.cells) {
+      const offset = id * 3;
+      const distance = (centers[offset] - act.x) ** 2 + (centers[offset + 2] - act.z) ** 2;
+
+      closest = Math.min(closest, distance);
+    }
+
+    if (this.time >= this.shieldUntil) this.guestPressure = guestProximity(Math.sqrt(closest));
+
+    if (this.time < encounter.dialogueAt) return;
+
+    encounter.dialogueAt = this.time + 5.35;
+
+    if (encounter.kind === 'takes') {
+      const take = encounter.greeted ? this.guests.takes.pop() : this.guests.hosts.pop();
+
+      encounter.line = take ? (encounter.greeted ? 'Rider: ' + take : take) : undefined;
+      encounter.greeted = true;
+    } else if (encounter.kind === 'prank') {
+      encounter.line = this.guests.pranks[encounter.variant].pop();
+    } else if (encounter.kind === 'weird') {
+      encounter.line = this.guests.weird.pop();
     }
   }
 
@@ -149,11 +181,14 @@ export class Ride {
 
     this.squeeze += (load - this.squeeze) * (1 - Math.exp(-STEP * 4));
 
+    this.updateGuest();
+
     this.tolerance = squeezeTolerance(
       this.tolerance,
       this.rawSqueeze === 1 ? 1 : this.squeeze,
       STEP,
       this.encounter?.kind === 'smoker',
+      this.guestPressure,
     );
 
     if (this.tolerance <= 1e-9) {
@@ -223,11 +258,14 @@ export class Ride {
       if (!power) continue;
 
       this.inventory[slot] = null;
-      const cue = power === 'crazy' ? 'crazy' : this.random() < 0.5 ? 'fart' : 'vomit';
+      const cue = power === 'gross' ? (this.random() < 0.5 ? 'fart' : 'vomit') : power;
 
       this.animation = { cue, began: this.time, until: this.time + (cue === 'crazy' ? 2.5 : 2.25) };
       this.cues.push(cue);
-      this.crowd.react(power, this.fluid, this.time, this.phase === 'doors');
+
+      if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + 0.25);
+      else if (power === 'shield') this.shieldUntil = this.time + 9;
+      else this.crowd.react(power, this.fluid, this.time, this.phase === 'doors');
     }
 
     this.actions.clear();
@@ -296,7 +334,7 @@ export class Ride {
 
     return {
       ...grid.point(choice),
-      power: this.random() < 0.5 ? ('crazy' as const) : ('gross' as const),
+      power: POWERS[Math.floor(this.random() * POWERS.length)],
     };
   }
 
@@ -317,7 +355,7 @@ export class Ride {
       if (this.stop > 0 && this.stop % ENCOUNTER_CYCLE === 0) {
         this.schedule.clear();
 
-        for (const [stop, kind] of encounterSchedule(this.stop, this.random))
+        for (const [stop, kind] of encounterSchedule(this.stop, this.guestRandom))
           this.schedule.set(stop, kind);
       }
 
@@ -334,7 +372,12 @@ export class Ride {
           kind,
           expires: this.stop + ENCOUNTERS[kind].stops,
           began: this.time,
-          takeOffset: Math.floor(this.random() * TAKES.length),
+          variant:
+            kind === 'acrobat' || kind === 'musician' || kind === 'prank'
+              ? this.guests.variant(kind)
+              : 0,
+          dialogueAt: this.time,
+          greeted: false,
         };
 
         this.waitingEncounter = undefined;

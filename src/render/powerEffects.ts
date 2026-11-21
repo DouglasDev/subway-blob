@@ -4,6 +4,8 @@ import type { Ride } from '../sim/ride.ts';
 const palettes = {
   crazy: [0xff75da, 0x69ebff, 0xffe478, 0xa177ff, 0xe0ffa2],
   fart: [0xa6d941, 0xced74b, 0x7eb746, 0xe4ed76, 0x76ba86],
+  cool: [0x76ecff, 0xd8ffff, 0x7dcdff, 0xa7eadf, 0xffffff],
+  shield: [0x65b3fa, 0x67f1ff, 0x87eeee, 0xa1b6ff, 0xc9f7ff],
   vomit: [0x96f032, 0xd5fb5a, 0x54d04d, 0xe9f977, 0x8bd931],
 };
 
@@ -28,11 +30,25 @@ export function buildPowerEffects(scene: T.Scene) {
     return particle;
   });
 
-  scene.add(group);
+  const shield = new T.Mesh(
+    new T.SphereGeometry(0.71, 21, 15),
+    new T.MeshBasicMaterial({
+      color: 0x75ccff,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+    }),
+  );
+
+  shield.scale.y = 1.29;
+  scene.add(group, shield);
 
   return (ride: Ride) => {
     const { animation, time, fluid } = ride;
 
+    shield.visible = ride.shieldUntil > time && ride.phase !== 'popped';
+    shield.position.set(fluid.x, 0.78, fluid.z);
+    shield.material.opacity = 0.16 + Math.sin(time * 7) * 0.045;
     group.visible = !!animation && time < animation.until && ride.phase !== 'popped';
     if (!group.visible || !animation) return;
 
@@ -57,7 +73,7 @@ export function buildPowerEffects(scene: T.Scene) {
       particle.material.opacity = (1 - progress) * (mode === 'fart' ? 0.74 : 1);
       particle.rotation.set(age * (4 + (index % 3)), angle, age * 4 + index);
 
-      if (mode === 'crazy') {
+      if (mode === 'crazy' || mode === 'cool' || mode === 'shield') {
         particle.position.set(
           Math.cos(angle) * radius,
           0.18 + (index % 8) * 0.23 + Math.sin(age * 5 + index) * 0.16,

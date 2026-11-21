@@ -40,3 +40,5 @@ pnpm run build
 ```
 
 The existing GitHub Actions workflow publishes the built app to RCade from the main branch.
+
+Guest locations are randomized throughout each twelve-stop stretch, including terminal visits. Dialogue draws from a shuffled list without repeats during a ride. Staying close to a guest slowly drains tolerance. A Cool Pack restores up to 25 percentage points of tolerance, and a Quiet Bubble cancels the nearby-guest drain for nine seconds.

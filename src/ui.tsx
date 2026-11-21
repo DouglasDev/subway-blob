@@ -758,6 +758,12 @@ export const EncounterNotice = styled.div`
   font: 0.69rem var(--mono);
   pointer-events: none;
 
+  &[data-danger='true'] {
+    background: #743728f2;
+    border-color: #e57d5f;
+    color: #fff1c8;
+  }
+
   html[data-arcade='true'] & {
     left: 5px;
     top: 27px;
@@ -819,6 +825,12 @@ export const PowerNotice = styled.div`
 
   &[data-mode='vomit'] {
     background: #a4eb74;
+  }
+
+  &[data-mode='cool'],
+  &[data-mode='shield'] {
+    background: #a8e5ff;
+    color: #163b60;
   }
 
   html[data-arcade='true'] & {

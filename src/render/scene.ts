@@ -97,7 +97,16 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
       if (lastTick !== ride.time || lastPhase !== ride.phase) {
         updateDoors(ride.door);
-        updateCrowd(ride.crowd.riders, ride.time);
+        const acrobat =
+          ride.act?.role === 'acrobat' && ride.encounter
+            ? {
+                id: ride.act.id,
+                move: ride.encounter.variant,
+                age: ride.time - ride.encounter.began,
+              }
+            : undefined;
+
+        updateCrowd(ride.crowd.riders, acrobat);
         updateObjects(ride);
         updatePower(ride);
         lastTick = ride.time;
@@ -109,7 +118,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       updateTrack(ride.stop, ride.renderTravel, inTunnel, ride.time);
       const crazy = ride.animation?.cue === 'crazy' && ride.time < ride.animation.until;
 
-      const heat = Math.max(1 - ride.tolerance, ride.squeeze);
+      const heat = Math.max(1 - ride.tolerance, ride.squeeze, ride.guestPressure * 0.52);
 
       updateBlob(popped, heat, crazy ? Math.sin(ride.time * 28) : 0);
 

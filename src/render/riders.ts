@@ -58,7 +58,7 @@ export function buildRiders(scene: T.Object3D) {
     mesh.setColorAt(index, color.setHex(tint));
   }
 
-  return (riders: Figure[], time = 0) => {
+  return (riders: Figure[], acrobat?: { id: number; move: number; age: number }) => {
     const counts = new Uint16Array(torso.length);
 
     for (const [index, { id, x, z, heading, stride, role }] of riders.entries()) {
@@ -72,11 +72,43 @@ export function buildRiders(scene: T.Object3D) {
 
       person.position.set(x, Math.abs(swing) * 0.06, z);
       person.rotation.y = heading + (stride ? 0 : ((id % 5) - 2) * 0.25);
-      const performing = stride === 0;
+      person.rotation.x = 0;
+      person.rotation.z = 0;
 
-      person.rotation.z = role === 'acrobat' && performing ? Math.sin(time * 6) * 1.75 : 0;
-      if (role === 'acrobat' && performing)
-        person.position.y += Math.abs(Math.sin(time * 6)) * 0.44;
+      if (acrobat?.id === id && !stride) {
+        const beat = acrobat.age * 4.6;
+        const leap = Math.max(0, Math.sin(beat));
+
+        switch (acrobat.move) {
+          case 0:
+            person.rotation.z = Math.sin(beat) * 1.28;
+            person.position.y += Math.abs(Math.sin(beat)) * 0.38;
+            break;
+          case 1:
+            person.rotation.z = Math.PI + Math.sin(beat) * 0.16;
+            person.position.y += 1.6;
+            break;
+          case 2:
+            person.rotation.y += beat * 1.9;
+            person.rotation.x = Math.sin(beat) * 0.45;
+            person.position.y += leap * 0.42;
+            break;
+          case 3:
+            person.rotation.x = -leap * 1.08;
+            person.position.y += leap * 0.72;
+            break;
+
+          case 4: {
+            const turn = (acrobat.age % 2.1) / 2.1;
+
+            person.rotation.z = turn * Math.PI * 2;
+            person.position.x += Math.sin(turn * Math.PI * 2) * 0.35;
+            person.position.y += Math.sin(turn * Math.PI) * 1.45;
+            break;
+          }
+        }
+      }
+
       person.scale.setScalar(size);
       person.updateMatrix();
 

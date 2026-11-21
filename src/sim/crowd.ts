@@ -159,7 +159,7 @@ export class Crowd {
     if (performer) performer.wantsExit = true;
   }
 
-  react(power: Power, from: Location, time: number, doors: boolean) {
+  react(power: Extract<Power, 'crazy' | 'gross'>, from: Location, time: number, doors: boolean) {
     const distance = (rider: Rider) => Math.hypot(rider.x - from.x, rider.z - from.z);
 
     const nearby = this.riders

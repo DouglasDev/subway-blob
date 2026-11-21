@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { STATIONS, stationIndex, travelDirection } from '../src/sim/route.ts';
-import { ENCOUNTERS, squeezeTolerance } from '../src/sim/encounters.ts';
+import {
+  ENCOUNTERS,
+  ENCOUNTER_CYCLE,
+  encounterSchedule,
+  guestProximity,
+  seededRandom,
+  squeezeTolerance,
+} from '../src/sim/encounters.ts';
+import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
 import { Fluid } from '../src/sim/fluid.ts';
 import { Grid } from '../src/sim/grid.ts';
 import { HOT_VOLUME, Ride, STANDARD_VOLUME, STEP } from '../src/sim/ride.ts';
@@ -139,6 +147,7 @@ test('the opening crowd is distributed and the first 4 train stop stays gentle',
 
   assert.equal(ride.crowd.onboard, 12);
   assert.ok(Math.min(...counts()) >= 2);
+  ride.schedule.clear();
   ride.start();
   let peak = 0;
 
@@ -225,22 +234,31 @@ test('AC grows the blob and the next door opening restores the standard volume',
   assertVolume(ride.fluid, ride.mask);
 });
 
-test('seeded encounters replay and the three acts appear early', () => {
-  const a = new Ride(22);
-  const b = new Ride(22);
+test('every encounter can move across the schedule and two-stop acts reserve their next stop', () => {
+  const create = (seed: number) => encounterSchedule(0, seededRandom(seed));
 
-  assert.deepEqual([...a.schedule], [...b.schedule]);
-  assert.notDeepEqual([...a.schedule], [...new Ride(12071).schedule]);
-  assert.equal(a.schedule.size, Object.keys(ENCOUNTERS).length);
-  assert.ok(!a.schedule.has(0));
+  assert.deepEqual([...create(22)], [...create(22)]);
+  const positions = new Map<string, Set<number>>();
+  const occupiedStarts = new Set<number>();
 
-  assert.deepEqual(
-    new Set([a.schedule.get(1), a.schedule.get(2), a.schedule.get(4)]),
-    new Set(['acrobat', 'musician', 'prank']),
-  );
+  for (let seed = 1; seed <= 128; seed++) {
+    const schedule = create(seed);
 
-  assert.equal(a.schedule.get(5), 'takes');
-  assert.ok(!a.schedule.has(6));
+    assert.equal(schedule.size, Object.keys(ENCOUNTERS).length);
+
+    for (const [stop, kind] of schedule) {
+      const starts = positions.get(kind) ?? new Set<number>();
+
+      starts.add(stop);
+      occupiedStarts.add(stop);
+      positions.set(kind, starts);
+      assert.ok(stop + ENCOUNTERS[kind].stops <= ENCOUNTER_CYCLE);
+      if (kind === 'takes') assert.ok(!schedule.has(stop + 1));
+    }
+  }
+
+  assert.equal(occupiedStarts.size, ENCOUNTER_CYCLE);
+  for (const starts of positions.values()) assert.ok(starts.size > 6);
 });
 
 test('the train reverses at both terminals and keeps counting stops', () => {
@@ -265,23 +283,75 @@ test('the train reverses at both terminals and keeps counting stops', () => {
   assert.equal(ride.phase, 'arriving');
 });
 
-test('the opening ride shows all three acts and a series of different SubwayTakes', () => {
+test('dialogue plays slowly and does not repeat over thirty stops', () => {
   const ride = new Ride(12071);
-  const acts = new Set();
-  const takes = new Set();
+  const spoken = new Set<string>();
+  let previous: string | undefined;
+  let when = 0;
+  const actors = new Set();
 
   ride.start();
 
-  for (let tick = 0; tick < 3000 && ride.stop < 7; tick++) {
+  for (let tick = 0; tick < 14000 && ride.stop < 30; tick++) {
+    ride.tolerance = 1;
     ride.tick({ x: 0, z: 0 });
-    if (ride.act) acts.add(ride.act.role);
-    if (ride.encounter?.kind === 'takes' && ride.speech?.startsWith('Rider:'))
-      takes.add(ride.speech);
+    if (ride.act) actors.add(ride.act.role);
+
+    if (!ride.speech) {
+      previous = undefined;
+
+      continue;
+    }
+
+    if (ride.speech === previous) continue;
+    if (previous) assert.ok(ride.time - when >= 5.35 - STEP);
+    assert.ok(!spoken.has(ride.speech), ride.speech);
+    spoken.add(ride.speech);
+    previous = ride.speech;
+    when = ride.time;
   }
 
-  for (const kind of ['acrobat', 'musician', 'prank']) assert.ok(acts.has(kind));
-  assert.ok(takes.size >= 7);
-  assert.ok(ride.tolerance < 0.9);
+  assert.equal(ride.stop, 30);
+  for (const kind of ['acrobat', 'musician', 'prank', 'takes', 'weird'])
+    assert.ok(actors.has(kind));
+  assert.ok(spoken.size >= 15);
+});
+
+test('the moves, songs, and pranks rotate through all five choices before repeating', () => {
+  const content = guestContent(seededRandom(22));
+
+  assert.equal(PRANKS.length, 5);
+
+  for (const kind of ['acrobat', 'musician', 'prank'] as const) {
+    const first = Array.from({ length: 5 }, () => content.variant(kind));
+
+    assert.equal(new Set(first).size, 5);
+    assert.notEqual(content.variant(kind), first[4]);
+  }
+});
+
+test('guest proximity drains tolerance, while Cool Pack heals and Quiet Bubble protects', () => {
+  const guest = guestProximity(0.4);
+
+  assert.ok(guest > 0.8);
+  assert.equal(guestProximity(0.85), 0);
+  assert.ok(squeezeTolerance(0.6, 0, 1, false, guest) < 0.6);
+  assert.ok(squeezeTolerance(0.6, 0, 1) > 0.6);
+
+  const ride = new Ride();
+
+  ride.schedule.clear();
+  ride.start();
+  ride.tolerance = 0.5;
+  ride.inventory[0] = 'cool';
+  ride.usePower(0);
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(ride.tolerance >= 0.75);
+  ride.inventory[1] = 'shield';
+  ride.usePower(1);
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(ride.shieldUntil >= ride.time + 9 - STEP);
+  assert.deepEqual(ride.inventory, [null, null]);
 });
 
 test('one pickup is spawned per stop, full slots leave it in place, and use frees a slot', () => {
