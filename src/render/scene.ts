@@ -5,6 +5,7 @@ import { buildCar, buildTrack } from './carScene';
 import { buildRiders } from './riders';
 import { buildRideObjects } from './rideObjects';
 import { buildPowerEffects } from './powerEffects';
+import { buildSmoke } from './smoke';
 
 export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = false) {
   const renderer = new T.WebGLRenderer({
@@ -39,6 +40,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   const updateCrowd = buildRiders(scene);
   const updateObjects = buildRideObjects(scene);
   const updatePower = buildPowerEffects(scene);
+  const updateSmoke = buildSmoke(scene);
   const updateBlob = buildBlob(scene, ride.fluid, ride.mask);
   const burst = new T.Group();
   const dropGeometry = new T.IcosahedronGeometry(0.065, 1);
@@ -158,6 +160,13 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       );
 
       camera.lookAt(focus);
+
+      updateSmoke(
+        !popped && performer?.role === 'smoker' ? performer : undefined,
+        ride.time + popTime,
+        camera,
+      );
+
       renderer.render(scene, camera);
     },
 

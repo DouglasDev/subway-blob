@@ -59,6 +59,7 @@ export class Ride {
     began: number;
     variant: number;
     dialogueAt: number;
+    reacted?: boolean;
     line?: string;
     exchange?: { take: string; verdict: string; beat: 'question' | 'take' | 'verdict' };
   } | null = null;
@@ -129,6 +130,11 @@ export class Ride {
     this.guestPressure = 0;
 
     if (!encounter || !act) return;
+
+    if (!encounter.reacted) {
+      encounter.reacted = true;
+      this.cues.push(encounter.kind);
+    }
 
     const { centers } = this.car.grid;
     let closest = Infinity;
@@ -456,6 +462,7 @@ export class Ride {
           dialogueAt: this.time,
         };
 
+        if (kind === 'ac') this.cues.push(kind);
         this.waitingEncounter = undefined;
       }
     } else if (this.phase === 'closing') {

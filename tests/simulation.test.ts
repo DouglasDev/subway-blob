@@ -20,6 +20,7 @@ import {
   seededRandom,
   squeezeTolerance,
 } from '../src/sim/encounters.ts';
+import type { Encounter } from '../src/sim/encounters.ts';
 import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
 import { Fluid } from '../src/sim/fluid.ts';
 import { Grid } from '../src/sim/grid.ts';
@@ -596,4 +597,29 @@ test('candy stays at the attraction point and Speed Boost expires after ten seco
   assert.equal(ride.expressUntil, ride.time + EXPRESS_SECONDS);
   ride.tick({ x: -1, z: 0 });
   assert.deepEqual(ride.candy, { ...location, until: STEP + CANDY_SECONDS });
+});
+
+test('each encounter cues one rider reaction when the event is present in the car', () => {
+  for (const kind of Object.keys(ENCOUNTERS) as Encounter[]) {
+    const ride = new Ride();
+
+    ride.schedule.clear();
+    ride.schedule.set(0, kind);
+    ride.start();
+    let count = 0;
+
+    for (let tick = 0; tick < 155; tick++) {
+      ride.tick({ x: 0, z: 0 });
+
+      for (const cue of ride.cues.splice(0)) {
+        if (cue !== kind) continue;
+
+        assert.equal(ride.encounter?.kind, kind);
+        if (kind !== 'ac') assert.equal(ride.act?.role, kind);
+        count++;
+      }
+    }
+
+    assert.equal(count, 1, kind);
+  }
 });

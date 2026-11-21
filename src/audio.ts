@@ -1,3 +1,4 @@
+import { ENCOUNTERS } from './sim/encounters.ts';
 import type { Cue, Encounter } from './sim/encounters.ts';
 
 const music = {
@@ -17,6 +18,20 @@ const performances = {
   ],
   prank: new URL('./assets/pigeon.mp3', import.meta.url).href,
 };
+
+const reactions: Record<Encounter, string> = {
+  acrobat: new URL('./assets/reaction-acrobat.mp3', import.meta.url).href,
+  musician: new URL('./assets/reaction-musician.mp3', import.meta.url).href,
+  prank: new URL('./assets/reaction-prank.mp3', import.meta.url).href,
+  smoker: new URL('./assets/reaction-smoker.mp3', import.meta.url).href,
+  takes: new URL('./assets/reaction-takes.mp3', import.meta.url).href,
+  weird: new URL('./assets/reaction-weird.mp3', import.meta.url).href,
+  ac: new URL('./assets/reaction-ac.mp3', import.meta.url).href,
+};
+
+function isEncounter(cue: Cue): cue is Encounter {
+  return Object.hasOwn(ENCOUNTERS, cue);
+}
 
 const powerEffects = {
   crazy: new URL('./assets/crazy.mp3', import.meta.url).href,
@@ -74,6 +89,9 @@ export class RideAudio {
     musician: performances.musician.map((url) => clip(url, 0.54, true)),
     prank: clip(performances.prank, 0.61, true),
   };
+  private readonly guestReactions = new Map(
+    (Object.keys(reactions) as Encounter[]).map((kind) => [kind, clip(reactions[kind], 0.82)]),
+  );
   private readonly effects = {
     crazy: clip(powerEffects.crazy, 0.75),
     fart: clip(powerEffects.fart, 0.91),
@@ -86,6 +104,7 @@ export class RideAudio {
     this.performanceClips.acrobat,
     ...this.performanceClips.musician,
     this.performanceClips.prank,
+    ...this.guestReactions.values(),
     ...Object.values(this.effects),
   ];
   private context?: AudioContext;
@@ -94,6 +113,7 @@ export class RideAudio {
   private muted = false;
   private rolling = false;
   private activePerformance?: HTMLAudioElement;
+  private activeReaction?: HTMLAudioElement;
 
   unlock() {
     this.allowed = true;
@@ -143,6 +163,14 @@ export class RideAudio {
           ? this.performanceClips[kind]
           : undefined;
 
+    if (active) {
+      const volume = kind === 'musician' ? 0.54 : kind === 'acrobat' ? 0.59 : 0.61;
+      const reacting =
+        this.activeReaction && !this.activeReaction.paused && !this.activeReaction.ended;
+
+      active.volume = reacting ? volume * 0.42 : volume;
+    }
+
     if (active === this.activePerformance) return;
 
     this.activePerformance?.pause();
@@ -152,7 +180,17 @@ export class RideAudio {
   }
 
   cue(cue: Cue) {
+    if (cue === 'pop') this.activeReaction?.pause();
     if (!this.allowed || this.muted) return;
+
+    if (isEncounter(cue)) {
+      this.activeReaction?.pause();
+      this.activeReaction = this.guestReactions.get(cue);
+
+      if (this.activeReaction) this.play(this.activeReaction);
+
+      return;
+    }
 
     if (cue === 'crazy' || cue === 'fart' || cue === 'vomit') {
       this.play(this.effects[cue]);
@@ -190,6 +228,7 @@ export class RideAudio {
   reset() {
     this.rolling = false;
     this.activePerformance = undefined;
+    this.activeReaction = undefined;
 
     for (const clip of this.clips) {
       clip.pause();

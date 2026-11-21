@@ -6,6 +6,14 @@ type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role'>;
 
 const skins = [0xdfa982, 0x8e5040, 0xb87752, 0x58362b, 0xe8ba98, 0xa66b52];
 
+export function riderSize(id: number) {
+  return 0.88 + ((id * 7) % 21) / 100;
+}
+
+export function riderFacing({ id, heading, stride }: Pick<Figure, 'id' | 'heading' | 'stride'>) {
+  return heading + (stride ? 0 : ((id % 5) - 2) * 0.25);
+}
+
 function part(scene: T.Object3D, geometry: T.BufferGeometry, map?: T.Texture, capacity = 128) {
   const mesh = new T.InstancedMesh(
     geometry,
@@ -64,8 +72,9 @@ export function buildRiders(scene: T.Object3D) {
     let legCount = 0;
     let hemCount = 0;
 
-    for (const [index, { id, x, z, heading, stride, role }] of riders.entries()) {
-      const size = 0.88 + ((id * 7) % 21) / 100;
+    for (const [index, rider] of riders.entries()) {
+      const { id, x, z, stride, role } = rider;
+      const size = riderSize(id);
       const style = riderStyle(id);
       const kind = role === 'takes' ? 1 : role === 'prank' ? 10 : style.shirt;
       const jacket = shirts[kind];
@@ -77,7 +86,7 @@ export function buildRiders(scene: T.Object3D) {
       const swing = stride ? Math.sin(stride) * 0.47 : 0;
 
       person.position.set(x, Math.abs(swing) * 0.06, z);
-      person.rotation.y = heading + (stride ? 0 : ((id % 5) - 2) * 0.25);
+      person.rotation.y = riderFacing(rider);
       person.rotation.x = 0;
       person.rotation.z = 0;
 
