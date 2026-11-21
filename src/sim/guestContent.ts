@@ -65,17 +65,6 @@ const extraTakes = [
   'Every landlord should have to move a couch up their own stairs.',
 ];
 
-const hostLines = [
-  'Kareem: Give me your most controversial train opinion.',
-  'Kareem: What would you change about the city?',
-  'Kareem: Pitch me one very small revolution.',
-  'Kareem: What’s a rule nobody understands?',
-  'Kareem: Give me a take you can defend until the next stop.',
-  'Kareem: What deserves its own express train?',
-  'Kareem: What’s been overrated for too long?',
-  'Kareem: What’s your most specific grievance?',
-];
-
 const extraWeird = [
   'I keep my least favorite receipt in a tiny safe.',
   'That station clock and I are seeing other people.',
@@ -176,7 +165,6 @@ export const PRANKS = [
 
 export function guestContent(random: () => number) {
   const takes = shuffle([...TAKES, ...extraTakes], random);
-  const hosts = shuffle([...hostLines], random);
   const weird = shuffle([...WEIRD_LINES, ...extraWeird], random);
   const pranks = PRANKS.map(({ lines }) => shuffle([...lines], random));
   const sequences = {
@@ -207,5 +195,5 @@ export function guestContent(random: () => number) {
     return next;
   }
 
-  return { takes, hosts, weird, pranks, variant };
+  return { takes, weird, pranks, variant };
 }

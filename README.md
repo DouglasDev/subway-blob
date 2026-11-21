@@ -41,4 +41,4 @@ pnpm run build
 
 The existing GitHub Actions workflow publishes the built app to RCade from the main branch.
 
-Guest locations are randomized throughout each twelve-stop stretch, including terminal visits. Dialogue draws from a shuffled list without repeats during a ride. Staying close to a guest slowly drains tolerance. A Cool Pack restores up to 25 percentage points of tolerance, and a Quiet Bubble cancels the nearby-guest drain for nine seconds.
+Guest locations are randomized throughout each twelve-stop stretch, including terminal visits. Dialogue draws from a shuffled list without repeats during a ride. Staying close to a guest slowly drains tolerance. Each station offers one pickup, increasing to two from stop eight. The pickup deck favors Stink Bomb and Slime Spray over Crazy Mode. Annoying Alarm makes riders back off and can send some toward the doors, while Sell Candy draws them away to a cluster. Cool Pack restores up to 25 tolerance points. Quiet Bubble blocks guest drain and cuts squeeze pressure by 80% for 18 seconds. Express Burst speeds up movement for 10 seconds, and Pocket Fan suppresses smoke and heat penalties for 14 seconds.

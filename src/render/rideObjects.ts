@@ -1,5 +1,6 @@
 import * as T from 'three';
 import type { Ride } from '../sim/ride.ts';
+import { POWERS } from '../sim/powers.ts';
 import { buildGags, buildInstruments } from './gags';
 
 function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
@@ -11,13 +12,18 @@ function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
 }
 
 export function buildRideObjects(scene: T.Scene) {
-  const token = new T.Group();
-  const jewel = part(token, new T.IcosahedronGeometry(0.13, 0), 0xffd061);
-  const halo = part(token, new T.TorusGeometry(0.16, 0.016, 6, 16), 0xfffac0);
-  const beacon = part(token, new T.CircleGeometry(0.24, 16), 0xd79849);
+  const tokens = Array.from({ length: 2 }, () => {
+    const token = new T.Group();
+    const jewel = part(token, new T.IcosahedronGeometry(0.13, 0), 0xffd061);
+    const halo = part(token, new T.TorusGeometry(0.16, 0.016, 6, 16), 0xfffac0);
+    const beacon = part(token, new T.CircleGeometry(0.24, 16), 0xd79849);
 
-  beacon.rotation.x = -Math.PI / 2;
-  scene.add(token);
+    beacon.rotation.x = -Math.PI / 2;
+    beacon.position.y = 0.014;
+    scene.add(token);
+
+    return { token, jewel, halo, beacon };
+  });
 
   const luggage = new Map<number, T.Group>();
   const stageMark = part(scene, new T.RingGeometry(0.44, 0.5, 20), 0xffc963);
@@ -71,23 +77,25 @@ export function buildRideObjects(scene: T.Scene) {
   }
 
   return (ride: Ride) => {
-    const { pickup, time } = ride;
+    const { pickups, time } = ride;
     const actor = ride.act;
 
-    token.visible = !!pickup;
+    for (const [index, { token, jewel, halo, beacon }] of tokens.entries()) {
+      const pickup = pickups[index];
 
-    if (pickup) {
+      token.visible = !!pickup;
+
+      if (!pickup) continue;
+
       token.position.set(pickup.x, 0, pickup.z);
-      jewel.position.y = pickup.y + Math.sin(time * 6) * 0.055;
-      jewel.rotation.set(time, time * 2.4, 0.2);
+      jewel.position.y = pickup.y + Math.sin(time * 6 + index) * 0.055;
+      jewel.rotation.set(time, index + time * 2.4, 0.2);
+      const color = POWERS[pickup.power].color;
 
-      (jewel.material as T.MeshStandardMaterial).color.setHex(
-        { crazy: 0xd794ff, gross: 0xffd061, cool: 0x8de8ff, shield: 0x70a8ff }[pickup.power],
-      );
-
+      (jewel.material as T.MeshStandardMaterial).color.setHex(color);
+      (beacon.material as T.MeshStandardMaterial).color.setHex(color);
       halo.position.y = jewel.position.y;
       halo.rotation.y = time * 2.4;
-      beacon.position.y = 0.014;
     }
 
     const onboard = new Set(ride.crowd.riders.filter(({ prop }) => prop).map(({ id }) => id));

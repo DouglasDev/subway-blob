@@ -1,7 +1,8 @@
 import { CROSS_DEPTH, CROSS_SEATS, CROSS_WIDTH, DOORS, HEIGHT_LIMIT } from './car.ts';
 import { Grid } from './grid.ts';
 import { seededRandom } from './encounters.ts';
-import type { Encounter, Power } from './encounters.ts';
+import type { Encounter } from './encounters.ts';
+import type { Power } from './powers.ts';
 
 export type Location = { x: number; z: number };
 
@@ -19,7 +20,7 @@ export type Rider = Location & {
   away?: Location & { until: number };
 };
 
-const BOARDING = [10, 5, 5, 6, 6, 7, 8, 8, 9, 10, 11, 11, 11, 12, 13, 18];
+const BOARDING = [10, 5, 5, 6, 6, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10];
 const ZONES = 5;
 
 export class Crowd {
@@ -159,35 +160,46 @@ export class Crowd {
     if (performer) performer.wantsExit = true;
   }
 
-  react(power: Extract<Power, 'crazy' | 'gross'>, from: Location, time: number, doors: boolean) {
+  react(
+    power: Exclude<Power, 'cool' | 'shield' | 'express'>,
+    from: Location,
+    time: number,
+    doors: boolean,
+  ) {
+    const radius = { crazy: 2.35, fart: 2, vomit: 1.46, annoy: 2.6, candy: 2.65, fan: 1.3 }[power];
+    const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, candy: 0, fan: 0 }[power];
+    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: 10, fan: 7 }[power];
+
     const distance = (rider: Rider) => Math.hypot(rider.x - from.x, rider.z - from.z);
 
     const nearby = this.riders
       .filter(
-        (rider) =>
-          !rider.role &&
-          !rider.trajectory &&
-          !rider.wantsExit &&
-          distance(rider) < (power === 'gross' ? 1.65 : 2.35),
+        (rider) => !rider.role && !rider.trajectory && !rider.wantsExit && distance(rider) < radius,
       )
       .sort((a, b) => distance(a) - distance(b));
+    const candyEnd = from.x < 0 ? 1 : -1;
 
     for (const [index, rider] of nearby.entries()) {
-      if (index < (power === 'crazy' ? 3 : 2)) {
+      if (index < exits) {
         rider.wantsExit = true;
 
         if (doors) this.exit(rider, 0.1 * index);
       }
 
-      if (power === 'gross' || rider.wantsExit) {
-        const sign = Math.sign(rider.x - from.x) || 1;
+      if (power === 'crazy' && !rider.wantsExit) continue;
 
-        rider.away = {
-          x: rider.x + sign * 0.95,
-          z: rider.z + (Math.sign(rider.z - from.z) || 1) * 0.58,
-          until: time + 5,
-        };
-      }
+      rider.away =
+        power === 'candy'
+          ? {
+              x: from.x + candyEnd * (1.8 + (index % 4) * 0.26),
+              z: -0.48 + (index % 3) * 0.39,
+              until: time + duration,
+            }
+          : {
+              x: rider.x + (Math.sign(rider.x - from.x) || 1) * 0.95,
+              z: rider.z + (Math.sign(rider.z - from.z) || 1) * 0.58,
+              until: time + duration,
+            };
     }
   }
 
@@ -401,7 +413,7 @@ export class Crowd {
   }
 
   occupy(grid: Grid, mask: Uint8Array, stop: number) {
-    const packed = Math.min(1, Math.max(0, (stop - 2) / 6));
+    const packed = Math.min(1, Math.max(0, (stop - 2) / 11));
     const shoulderX = 0.16 + 0.09 * packed;
     const shoulderZ = 0.23 + 0.02 * packed;
 

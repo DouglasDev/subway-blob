@@ -1,3 +1,5 @@
+import type { Power } from './powers.ts';
+
 export function seededRandom(seed: number) {
   let state = seed >>> 0;
 
@@ -20,30 +22,7 @@ export const ENCOUNTERS = {
 
 export type Encounter = keyof typeof ENCOUNTERS;
 
-export type Power = 'crazy' | 'gross' | 'cool' | 'shield';
-
-export const POWERS: Power[] = ['crazy', 'gross', 'cool', 'shield'];
-
-export type PowerEffect = Exclude<Power, 'gross'> | 'fart' | 'vomit';
-
-export type Cue =
-  | Encounter
-  | 'announcement'
-  | 'chime'
-  | 'crazy'
-  | 'fart'
-  | 'vomit'
-  | 'cool'
-  | 'shield'
-  | 'pickup'
-  | 'pop';
-
-export const POWER_NAMES: Record<Power, string> = {
-  crazy: 'Crazy Mode',
-  gross: 'Gross-out',
-  cool: 'Cool Pack',
-  shield: 'Quiet Bubble',
-};
+export type Cue = Encounter | Power | 'announcement' | 'chime' | 'pickup' | 'pop';
 
 export const ENCOUNTER_CYCLE = 12;
 

@@ -6,6 +6,10 @@ const palettes = {
   fart: [0xa6d941, 0xced74b, 0x7eb746, 0xe4ed76, 0x76ba86],
   cool: [0x76ecff, 0xd8ffff, 0x7dcdff, 0xa7eadf, 0xffffff],
   shield: [0x65b3fa, 0x67f1ff, 0x87eeee, 0xa1b6ff, 0xc9f7ff],
+  annoy: [0xff834e, 0xffdb62, 0xf15b4d, 0xff9c73, 0xffef9e],
+  candy: [0xff76b3, 0xffc26d, 0xddabff, 0x93ebd2, 0xfff19a],
+  express: [0xffcf58, 0xffe694, 0xffa858, 0xffffaf, 0xfff8d2],
+  fan: [0x67dcca, 0xa1f9dd, 0x7ff2eb, 0xc7fff3, 0x74c7ef],
   vomit: [0x96f032, 0xd5fb5a, 0x54d04d, 0xe9f977, 0x8bd931],
 };
 
@@ -73,7 +77,7 @@ export function buildPowerEffects(scene: T.Scene) {
       particle.material.opacity = (1 - progress) * (mode === 'fart' ? 0.74 : 1);
       particle.rotation.set(age * (4 + (index % 3)), angle, age * 4 + index);
 
-      if (mode === 'crazy' || mode === 'cool' || mode === 'shield') {
+      if (mode !== 'fart' && mode !== 'vomit') {
         particle.position.set(
           Math.cos(angle) * radius,
           0.18 + (index % 8) * 0.23 + Math.sin(age * 5 + index) * 0.16,

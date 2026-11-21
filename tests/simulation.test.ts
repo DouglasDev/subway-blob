@@ -1,3 +1,10 @@
+import {
+  crowdPressure,
+  DOUBLE_PICKUP_STOP,
+  powerDeck,
+  POWERS,
+  QUIET_SECONDS,
+} from '../src/sim/powers.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { STATIONS, stationIndex, travelDirection } from '../src/sim/route.ts';
@@ -288,6 +295,8 @@ test('dialogue plays slowly and does not repeat over thirty stops', () => {
   const spoken = new Set<string>();
   let previous: string | undefined;
   let when = 0;
+  let stage: 'question' | 'take' | 'verdict' | undefined;
+  let conversations = 0;
   const actors = new Set();
 
   ride.start();
@@ -304,9 +313,28 @@ test('dialogue plays slowly and does not repeat over thirty stops', () => {
     }
 
     if (ride.speech === previous) continue;
-    if (previous) assert.ok(ride.time - when >= 5.35 - STEP);
-    assert.ok(!spoken.has(ride.speech), ride.speech);
-    spoken.add(ride.speech);
+
+    if (ride.encounter?.kind === 'takes') {
+      if (ride.speech === "Kareem: What's your take?") {
+        assert.ok(stage === undefined || stage === 'verdict');
+        stage = 'question';
+      } else if (ride.speech.startsWith('Rider: ')) {
+        assert.equal(stage, 'question');
+        stage = 'take';
+        assert.ok(!spoken.has(ride.speech));
+        spoken.add(ride.speech);
+      } else {
+        assert.equal(stage, 'take');
+        assert.match(ride.speech, /^Kareem: 100% (agree|disagree)$/);
+        stage = 'verdict';
+        conversations++;
+      }
+    } else {
+      if (previous && !previous.startsWith('Kareem: ')) assert.ok(ride.time - when >= 5.35 - STEP);
+      assert.ok(!spoken.has(ride.speech), ride.speech);
+      spoken.add(ride.speech);
+    }
+
     previous = ride.speech;
     when = ride.time;
   }
@@ -314,7 +342,8 @@ test('dialogue plays slowly and does not repeat over thirty stops', () => {
   assert.equal(ride.stop, 30);
   for (const kind of ['acrobat', 'musician', 'prank', 'takes', 'weird'])
     assert.ok(actors.has(kind));
-  assert.ok(spoken.size >= 15);
+  assert.ok(spoken.size >= 12);
+  assert.ok(conversations >= 4);
 });
 
 test('the moves, songs, and pranks rotate through all five choices before repeating', () => {
@@ -350,31 +379,97 @@ test('guest proximity drains tolerance, while Cool Pack heals and Quiet Bubble p
   ride.inventory[1] = 'shield';
   ride.usePower(1);
   ride.tick({ x: 0, z: 0 });
-  assert.ok(ride.shieldUntil >= ride.time + 9 - STEP);
+  assert.ok(ride.shieldUntil >= ride.time + QUIET_SECONDS - STEP);
   assert.deepEqual(ride.inventory, [null, null]);
 });
 
-test('one pickup is spawned per stop, full slots leave it in place, and use frees a slot', () => {
+test('a weighted deck favors both gross powers and includes every new pickup', () => {
+  const draw = powerDeck(seededRandom(8));
+  const total = Object.values(POWERS).reduce((sum, item) => sum + item.weight, 0);
+  const all = Array.from({ length: total }, () => draw());
+
+  assert.equal(all.filter((power) => power === 'crazy').length, 1);
+  assert.equal(all.filter((power) => power === 'fart').length, 3);
+  assert.equal(all.filter((power) => power === 'vomit').length, 3);
+  assert.equal(new Set(all).size, 9);
+
+  for (let index = 0; index < 120; index++) {
+    const first = draw();
+
+    assert.notEqual(draw(first), first);
+  }
+});
+
+test('higher stops have two distinct pickups, and full slots leave them available', () => {
+  for (const stop of [0, DOUBLE_PICKUP_STOP]) {
+    const ride = new Ride();
+
+    ride.stop = stop;
+    ride.schedule.clear();
+    ride.inventory[0] = 'cool';
+    ride.inventory[1] = 'shield';
+    ride.start();
+
+    while (ride.pickups.length === 0 && ride.time < 3) ride.tick({ x: 0, z: 0 });
+
+    assert.equal(ride.pickups.length, stop === 0 ? 1 : 2);
+    assert.equal(new Set(ride.pickups.map(({ power }) => power)).size, ride.pickups.length);
+    const location = ride.car.grid.point(ride.fluid.cells[0]);
+
+    ride.pickups[0] = { ...location, power: 'fart' };
+    ride.tick({ x: 0, z: 0 });
+    assert.equal(ride.pickups[0].power, 'fart');
+    ride.usePower(1);
+    ride.tick({ x: 0, z: 0 });
+    assert.equal(ride.inventory[1], 'fart');
+    assert.equal(ride.pickups.length, stop === 0 ? 0 : 1);
+  }
+});
+
+test('late crowd pressure is capped and Quiet Bubble helps even during a jam', () => {
+  assert.ok(crowdPressure(25, 1, 1) < 0.78);
+  assert.ok(crowdPressure(8, 1, 1) < crowdPressure(0, 1, 1));
   const ride = new Ride();
 
   ride.start();
 
-  while (!ride.pickup && ride.time < 3) ride.tick({ x: 0, z: 0 });
+  ride.crowd.occupy = (_grid, mask) => {
+    mask.fill(1);
+  };
 
-  assert.ok(ride.pickup);
-  const location = ride.car.grid.point(ride.fluid.cells[0]);
+  ride.tolerance = 0.63;
+  ride.inventory[0] = 'shield';
+  ride.usePower(0);
 
-  ride.pickup = { ...location, power: 'gross' };
-  ride.inventory[0] = 'crazy';
-  ride.inventory[1] = 'crazy';
-  ride.tick({ x: 0, z: 0 });
-  assert.ok(ride.pickup);
-  ride.usePower(1);
-  ride.tick({ x: 0, z: 0 });
-  assert.equal(ride.inventory[1], 'gross');
-  assert.equal(ride.pickup, null);
-  ride.tick({ x: 0, z: 0 });
-  assert.equal(ride.pickup, null);
+  for (let index = 0; index < 20; index++) ride.tick({ x: 0, z: 0 });
+
+  assert.ok(ride.tolerance > 0.67);
+  assertVolume(ride.fluid, ride.mask);
+});
+
+test('Express Burst moves faster and Pocket Fan clears AC expansion while active', () => {
+  const standard = new Ride();
+  const boosted = new Ride();
+
+  standard.start();
+  boosted.start();
+  boosted.inventory[0] = 'express';
+  boosted.usePower(0);
+  standard.tick({ x: 1, z: 0 });
+  boosted.tick({ x: 1, z: 0 });
+  assert.ok(boosted.fluid.x > standard.fluid.x);
+
+  const cooled = new Ride();
+
+  cooled.schedule.clear();
+  cooled.schedule.set(0, 'ac');
+  cooled.start();
+  while (cooled.time < 3) cooled.tick({ x: 0, z: 0 });
+  assert.equal(cooled.fluid.volume, HOT_VOLUME);
+  cooled.inventory[0] = 'fan';
+  cooled.usePower(0);
+  cooled.tick({ x: 0, z: 0 });
+  assert.equal(cooled.fluid.volume, STANDARD_VOLUME);
 });
 
 test('power-up exits wait for open doors and departures update the rider count', () => {

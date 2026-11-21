@@ -4,15 +4,16 @@ import type { Location } from './crowd.ts';
 import {
   ENCOUNTERS,
   ENCOUNTER_CYCLE,
-  POWERS,
   encounterSchedule,
   guestProximity,
   seededRandom,
   squeezeTolerance,
 } from './encounters.ts';
-import type { Cue, Encounter, Power, PowerEffect } from './encounters.ts';
+import type { Cue, Encounter } from './encounters.ts';
 import { Fluid } from './fluid.ts';
 import { guestContent } from './guestContent.ts';
+import { crowdPressure, DOUBLE_PICKUP_STOP, powerDeck, QUIET_SECONDS } from './powers.ts';
+import type { Power } from './powers.ts';
 import { stationIndex, travelDirection } from './route.ts';
 
 export const STEP = 1 / 20;
@@ -26,6 +27,8 @@ const DWELL = 6.3;
 
 export type Input = { x: number; z: number };
 
+export type Pickup = Location & { power: Power; y: number };
+
 export type Phase = 'ready' | 'running' | 'arriving' | 'doors' | 'closing' | 'popped';
 
 export class Ride {
@@ -37,7 +40,7 @@ export class Ride {
   readonly inventory: [Power | null, Power | null] = [null, null];
   readonly schedule: Map<number, Encounter>;
   readonly cues: Cue[] = [];
-  pickup: (Location & { power: Power; y: number }) | null = null;
+  pickups: Pickup[] = [];
   encounter: {
     kind: Encounter;
     expires: number;
@@ -45,9 +48,9 @@ export class Ride {
     variant: number;
     dialogueAt: number;
     line?: string;
-    greeted: boolean;
+    exchange?: { take: string; verdict: string; beat: 'question' | 'take' | 'verdict' };
   } | null = null;
-  animation: { cue: PowerEffect; began: number; until: number } | null = null;
+  animation: { cue: Power; began: number; until: number } | null = null;
   phase: Phase = 'ready';
   stop = 0;
   score = 0;
@@ -59,10 +62,14 @@ export class Ride {
   squeeze = 0;
   guestPressure = 0;
   shieldUntil = 0;
+  expressUntil = 0;
+  fanUntil = 0;
   private rawSqueeze = 0;
   private readonly random: () => number;
   private readonly guestRandom: () => number;
+  private readonly verdictRandom: () => number;
   private readonly guests: ReturnType<typeof guestContent>;
+  private readonly pickPower: ReturnType<typeof powerDeck>;
   private readonly actions = new Set<0 | 1>();
   private waitingEncounter?: Encounter;
   private spawned = false;
@@ -71,8 +78,10 @@ export class Ride {
   constructor(readonly seed = 12071) {
     this.random = seededRandom(seed ^ 0x6c8e9cf5);
     this.guestRandom = seededRandom(seed ^ 0x32c47ae1);
+    this.verdictRandom = seededRandom(seed ^ 0xe96da48f);
     this.schedule = encounterSchedule(0, this.guestRandom);
     this.guests = guestContent(seededRandom(seed ^ 0x42dd4ed9));
+    this.pickPower = powerDeck(seededRandom(seed ^ 0x7394ca32));
     this.crowd = new Crowd(seed);
     this.crowd.occupy(this.car.grid, this.mask, 0);
     this.fluid.step(this.mask);
@@ -125,10 +134,34 @@ export class Ride {
     encounter.dialogueAt = this.time + 5.35;
 
     if (encounter.kind === 'takes') {
-      const take = encounter.greeted ? this.guests.takes.pop() : this.guests.hosts.pop();
+      const exchange = encounter.exchange;
 
-      encounter.line = take ? (encounter.greeted ? 'Rider: ' + take : take) : undefined;
-      encounter.greeted = true;
+      if (exchange?.beat === 'question') {
+        exchange.beat = 'take';
+        encounter.line = 'Rider: ' + exchange.take;
+        encounter.dialogueAt = this.time + 3.8;
+      } else if (exchange?.beat === 'take') {
+        exchange.beat = 'verdict';
+        encounter.line = 'Kareem: ' + exchange.verdict;
+        encounter.dialogueAt = this.time + 2.9;
+      } else if (this.phase === 'doors' && this.phaseTime < 4.4) {
+        const take = this.guests.takes.pop();
+
+        encounter.line = take ? "Kareem: What's your take?" : undefined;
+
+        encounter.exchange = take
+          ? {
+              take,
+              verdict: this.verdictRandom() < 0.5 ? '100% agree' : '100% disagree',
+              beat: 'question',
+            }
+          : undefined;
+
+        encounter.dialogueAt = this.time + 2.35;
+      } else {
+        encounter.line = undefined;
+        encounter.dialogueAt = this.time + 0.2;
+      }
     } else if (encounter.kind === 'prank') {
       encounter.line = this.guests.pranks[encounter.variant].pop();
     } else if (encounter.kind === 'weird') {
@@ -170,14 +203,17 @@ export class Ride {
     this.phaseTime += STEP;
     this.moveTrain();
     this.activatePowers();
-    const speed = (STEP * 1.48) / Math.max(1, Math.hypot(input.x, input.z));
+    const speed =
+      (STEP * (this.time < this.expressUntil ? 2.28 : 1.48)) /
+      Math.max(1, Math.hypot(input.x, input.z));
     const dx = Math.max(-4.62, Math.min(4.62, this.fluid.x + input.x * speed)) - this.fluid.x;
     const dz = Math.max(-1.04, Math.min(1.04, this.fluid.z + input.z * speed)) - this.fluid.z;
 
     this.solveCrowd(dx, dz);
-    const local = this.crowd.congestion(this.fluid);
-    const difficulty = 0.48 * (1 - Math.exp(-Math.max(0, this.stop - 2) / 13));
-    const load = Math.max(this.rawSqueeze, Math.min(1, local * (0.85 + difficulty)));
+    const quiet = this.time < this.shieldUntil;
+    const fanned = this.time < this.fanUntil;
+    const pressure = crowdPressure(this.stop, this.rawSqueeze, this.crowd.congestion(this.fluid));
+    const load = quiet ? pressure * 0.2 : pressure;
 
     this.squeeze += (load - this.squeeze) * (1 - Math.exp(-STEP * 4));
 
@@ -185,9 +221,9 @@ export class Ride {
 
     this.tolerance = squeezeTolerance(
       this.tolerance,
-      this.rawSqueeze === 1 ? 1 : this.squeeze,
+      quiet ? Math.min(this.squeeze, load) : this.rawSqueeze === 1 ? pressure : this.squeeze,
       STEP,
-      this.encounter?.kind === 'smoker',
+      !quiet && !fanned && this.encounter?.kind === 'smoker',
       this.guestPressure,
     );
 
@@ -220,7 +256,8 @@ export class Ride {
   private solveCrowd(dx: number, dz: number) {
     const { grid, fixtures } = this.car;
     const saved = this.crowd.snapshot();
-    const target = this.encounter?.kind === 'ac' ? HOT_VOLUME : STANDARD_VOLUME;
+    const target =
+      this.encounter?.kind === 'ac' && this.time >= this.fanUntil ? HOT_VOLUME : STANDARD_VOLUME;
 
     this.crowd.tryPush(this.fluid, dx, dz, grid, fixtures);
     this.crowd.update(STEP, this.time, this.fluid, grid, fixtures);
@@ -258,14 +295,17 @@ export class Ride {
       if (!power) continue;
 
       this.inventory[slot] = null;
-      const cue = power === 'gross' ? (this.random() < 0.5 ? 'fart' : 'vomit') : power;
-
-      this.animation = { cue, began: this.time, until: this.time + (cue === 'crazy' ? 2.5 : 2.25) };
-      this.cues.push(cue);
+      this.animation = { cue: power, began: this.time, until: this.time + 2.5 };
+      this.cues.push(power);
 
       if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + 0.25);
-      else if (power === 'shield') this.shieldUntil = this.time + 9;
-      else this.crowd.react(power, this.fluid, this.time, this.phase === 'doors');
+      else if (power === 'shield') this.shieldUntil = this.time + QUIET_SECONDS;
+      else if (power === 'express') this.expressUntil = this.time + 10;
+      else {
+        if (power === 'fan') this.fanUntil = this.time + 14;
+
+        this.crowd.react(power, this.fluid, this.time, this.phase === 'doors');
+      }
     }
 
     this.actions.clear();
@@ -273,30 +313,33 @@ export class Ride {
 
   private updatePickup() {
     if (this.phase === 'doors' && this.door === 1 && !this.spawned) {
-      this.pickup = this.placePickup();
-      this.spawned = !!this.pickup;
+      this.pickups = this.placePickups(this.stop >= DOUBLE_PICKUP_STOP ? 2 : 1);
+      this.spawned = this.pickups.length > 0;
     }
 
-    const slot = this.inventory[0] === null ? 0 : this.inventory[1] === null ? 1 : -1;
-    const pickup = this.pickup;
+    if (this.pickups.length === 0 || this.inventory.every(Boolean)) return;
 
-    if (
-      slot === -1 ||
-      !pickup ||
-      !this.fluid.cells.some((id) => {
-        const point = this.car.grid.point(id);
+    this.pickups = this.pickups.filter((pickup) => {
+      const slot = this.inventory[0] === null ? 0 : this.inventory[1] === null ? 1 : -1;
 
-        return Math.hypot(point.x - pickup.x, point.y - pickup.y, point.z - pickup.z) < 0.21;
-      })
-    )
-      return;
+      if (
+        slot === -1 ||
+        !this.fluid.cells.some((id) => {
+          const point = this.car.grid.point(id);
 
-    this.inventory[slot] = pickup.power;
-    this.pickup = null;
-    this.cues.push('pickup');
+          return Math.hypot(point.x - pickup.x, point.y - pickup.y, point.z - pickup.z) < 0.21;
+        })
+      )
+        return true;
+
+      this.inventory[slot] = pickup.power;
+      this.cues.push('pickup');
+
+      return false;
+    });
   }
 
-  private placePickup() {
+  private placePickups(count: number): Pickup[] {
     const { grid } = this.car;
     const seen = new Uint8Array(grid.size);
     const queue = [...this.fluid.cells];
@@ -309,8 +352,8 @@ export class Ride {
       const point = grid.point(id);
       const distance = Math.hypot(point.x - this.fluid.x, point.z - this.fluid.z);
 
-      if (distance > 2.5) continue;
-      if (point.y > 0.28 && point.y < 0.58 && distance > 0.68 && Math.abs(point.z) < 0.95)
+      if (distance > 2.05) continue;
+      if (point.y > 0.28 && point.y < 0.58 && distance > 0.56 && Math.abs(point.z) < 0.95)
         choices.push(id);
 
       for (const neighbor of grid.neighbors.subarray(id * 6, id * 6 + 6)) {
@@ -321,21 +364,32 @@ export class Ride {
       }
     }
 
-    const choice =
-      choices[Math.floor(this.random() * choices.length)] ??
-      this.fluid.cells.find((id) => {
-        const { y } = grid.point(id);
+    const pickups: Pickup[] = [];
+    const used = new Set<number>();
 
-        return y > 0.25 && y < 0.6;
-      }) ??
-      this.fluid.cells[0];
+    for (let index = 0; index < count; index++) {
+      const first = pickups[0];
+      const pool = choices.filter((id) => {
+        if (!first) return true;
+        const candidate = grid.point(id);
 
-    if (choice === undefined) return null;
+        return Math.hypot(candidate.x - first.x, candidate.z - first.z) >= 0.8;
+      });
+      const available = pool.length ? pool : choices.filter((id) => !used.has(id));
+      const id =
+        available[Math.floor(this.random() * available.length)] ??
+        this.fluid.cells.find(
+          (cell) => !used.has(cell) && Math.abs(grid.point(cell).y - 0.45) < 0.18,
+        ) ??
+        this.fluid.cells.find((cell) => !used.has(cell));
 
-    return {
-      ...grid.point(choice),
-      power: POWERS[Math.floor(this.random() * POWERS.length)],
-    };
+      if (id === undefined) break;
+
+      used.add(id);
+      pickups.push({ ...grid.point(id), power: this.pickPower(first?.power) });
+    }
+
+    return pickups;
   }
 
   private moveTrain() {
@@ -377,7 +431,6 @@ export class Ride {
               ? this.guests.variant(kind)
               : 0,
           dialogueAt: this.time,
-          greeted: false,
         };
 
         this.waitingEncounter = undefined;
@@ -392,7 +445,7 @@ export class Ride {
   private arrive() {
     this.travel = 0;
     this.spawned = false;
-    this.pickup = null;
+    this.pickups = [];
     this.setPhase('arriving');
   }
 

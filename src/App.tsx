@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS, stationIndex } from './sim/route.ts';
-import { ENCOUNTERS, POWER_NAMES } from './sim/encounters.ts';
+import { ENCOUNTERS } from './sim/encounters.ts';
+import { POWERS } from './sim/powers.ts';
 import { ACROBAT_MOVES, MUSICIAN_SONGS, PRANKS } from './sim/guestContent.ts';
 import { RideAudio } from './audio';
 import { Ride } from './sim/ride.ts';
@@ -119,7 +120,14 @@ function snapshot(ride: Ride) {
     inventory: [...ride.inventory],
     speech: ride.speech,
     guestPressure: ride.guestPressure,
-    shield: ride.shieldUntil > ride.time,
+    sustainedPower:
+      ride.shieldUntil > ride.time
+        ? ('shield' as const)
+        : ride.expressUntil > ride.time
+          ? ('express' as const)
+          : ride.fanUntil > ride.time
+            ? ('fan' as const)
+            : undefined,
     variant: ride.encounter?.variant ?? 0,
     squeeze: ride.squeeze,
     power: ride.animation && ride.animation.until > ride.time ? ride.animation.cue : undefined,
@@ -369,6 +377,7 @@ export function App() {
         : hud.encounter === 'prank'
           ? PRANKS[hud.variant].name
           : undefined;
+  const activePower = hud.power ?? hud.sustainedPower;
   const ended = hud.phase === 'popped';
   const result = showResult;
 
@@ -430,14 +439,8 @@ export function App() {
               {hud.guestPressure > 0 && ' · Too close'}
             </EncounterNotice>
           )}
-          {(hud.power || hud.shield) && !ended && (
-            <PowerNotice data-mode={hud.power ?? 'shield'}>
-              {hud.power === 'fart'
-                ? 'Gross-out · Stink cloud'
-                : hud.power === 'vomit'
-                  ? 'Gross-out · Slime spray'
-                  : POWER_NAMES[hud.power ?? 'shield']}
-            </PowerNotice>
+          {activePower && !ended && (
+            <PowerNotice data-mode={activePower}>{POWERS[activePower].name}</PowerNotice>
           )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}
 
@@ -543,12 +546,12 @@ export function App() {
                 disabled={!power || ended}
                 aria-label={
                   power
-                    ? `Use ${POWER_NAMES[power]} in slot ${slot + 1}`
+                    ? `Use ${POWERS[power].name} in slot ${slot + 1}`
                     : `Empty power-up slot ${slot + 1}`
                 }
                 onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
               >
-                <InventoryKey>{key}</InventoryKey> {power ? POWER_NAMES[power] : 'Empty'}
+                <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
               </InventorySlot>
             );
           })}

@@ -49,6 +49,19 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
     { at: 0, length: 0.4, pitch: 280, end: 505 },
     { at: 0.13, length: 0.6, pitch: 420, end: 654 },
   ],
+  annoy: [
+    { at: 0, length: 0.29, pitch: 540, end: 725, shape: 'square' },
+    { at: 0.34, length: 0.42, pitch: 765, end: 450, shape: 'square' },
+  ],
+  candy: [
+    { at: 0, length: 0.25, pitch: 445, end: 670 },
+    { at: 0.24, length: 0.39, pitch: 740, end: 1100 },
+  ],
+  express: [{ at: 0, length: 0.6, pitch: 110, end: 482, shape: 'sawtooth' }],
+  fan: [
+    { at: 0, length: 0.8, pitch: 342, end: 211 },
+    { at: 0.12, length: 0.6, pitch: 675, end: 520 },
+  ],
   pop: [{ at: 0, length: 0.24, pitch: 325, end: 48, shape: 'triangle' }],
 };
 
