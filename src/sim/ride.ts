@@ -36,6 +36,7 @@ const DWELL = 6.3;
 const CLOSING = 3.6;
 const QUIET_SECONDS = (ARRIVAL + DWELL + CLOSING + TRAVEL) / 2;
 const TURN_RATE = 11;
+const REACTION_DELAY = 2;
 
 export type Input = { x: number; z: number };
 
@@ -60,7 +61,7 @@ export class Ride {
     began: number;
     variant: number;
     dialogueAt: number;
-    reacted?: boolean;
+    reactionAt?: number | null;
     line?: string;
     exchange?: { take: string; verdict: string; beat: 'question' | 'take' | 'verdict' };
   } | null = null;
@@ -131,12 +132,16 @@ export class Ride {
 
     this.guestPressure = 0;
 
-    if (!encounter || !act) return;
+    if (!encounter || (!act && encounter.kind !== 'ac')) return;
 
-    if (!encounter.reacted) {
-      encounter.reacted = true;
+    if (encounter.reactionAt === undefined) encounter.reactionAt = this.time + REACTION_DELAY;
+
+    if (encounter.reactionAt !== null && this.time + 1e-9 >= encounter.reactionAt) {
+      encounter.reactionAt = null;
       this.cues.push(encounter.kind);
     }
+
+    if (!act) return;
 
     const { centers } = this.car.grid;
     let closest = Infinity;
@@ -478,7 +483,6 @@ export class Ride {
           dialogueAt: this.time,
         };
 
-        if (kind === 'ac') this.cues.push(kind);
         this.waitingEncounter = undefined;
       }
     } else if (this.phase === 'closing') {

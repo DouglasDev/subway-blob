@@ -635,27 +635,33 @@ test('candy stays at the attraction point and Speed Boost expires after ten seco
   assert.deepEqual(ride.candy, { ...location, until: STEP + CANDY_SECONDS });
 });
 
-test('each encounter cues one rider reaction when the event is present in the car', () => {
+test('each encounter cues one rider reaction two seconds after it starts in the car', () => {
   for (const kind of Object.keys(ENCOUNTERS) as Encounter[]) {
     const ride = new Ride();
 
     ride.schedule.clear();
     ride.schedule.set(0, kind);
     ride.start();
-    let count = 0;
+    let startedAt: number | undefined;
+    const reactions: number[] = [];
 
     for (let tick = 0; tick < 155; tick++) {
       ride.tick({ x: 0, z: 0 });
+
+      if (ride.encounter?.kind === kind && (kind === 'ac' || ride.act?.role === kind))
+        startedAt ??= ride.time;
 
       for (const cue of ride.cues.splice(0)) {
         if (cue !== kind) continue;
 
         assert.equal(ride.encounter?.kind, kind);
         if (kind !== 'ac') assert.equal(ride.act?.role, kind);
-        count++;
+        reactions.push(ride.time);
       }
     }
 
-    assert.equal(count, 1, kind);
+    assert.notEqual(startedAt, undefined, kind);
+    assert.equal(reactions.length, 1, kind);
+    assert.ok(Math.abs(reactions[0] - startedAt! - 2) < 1e-8, kind);
   }
 });
