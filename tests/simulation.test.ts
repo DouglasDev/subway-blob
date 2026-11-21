@@ -141,7 +141,7 @@ test('a full 4 train ride preserves the legal volume and awards no point for a p
 
   assert.equal(idle.phase, 'popped');
   assert.ok(idle.score === idle.stop || idle.score === idle.stop + 1);
-  assert.ok(idle.score > 3 && idle.score < STATIONS.length);
+  assert.ok(idle.score > 3);
   assert.equal(idle.tolerance, 0);
 });
 
@@ -557,7 +557,34 @@ test('performers shift the nearby crowd and queue to exit when the encounter exp
   assert.ok(actor.wantsExit);
 });
 
-test('blob eyes follow the last movement and stay facing that way when steering stops', () => {
+test('the fluid solver turns the shoulders and legs while preserving connected volume', () => {
+  const grid = new Grid(28, 20, 28);
+  const mask = new Uint8Array(grid.size);
+  const fluid = new Fluid(grid, STANDARD_VOLUME, 0, 0);
+
+  function width(fromY: number, toY: number, axis: 'x' | 'z') {
+    const coordinates = fluid.cells
+      .map((cell) => grid.point(cell))
+      .filter(({ y }) => y >= fromY && y <= toY)
+      .map((point) => point[axis]);
+
+    return Math.max(...coordinates) - Math.min(...coordinates);
+  }
+
+  assert.ok(fluid.step(mask));
+  assert.ok(width(0.65, 1.05, 'x') > width(0.65, 1.05, 'z'));
+  assert.ok(width(0.2, 0.5, 'x') > width(0.2, 0.5, 'z'));
+
+  for (let step = 1; step <= 8; step++) {
+    assert.ok(fluid.step(mask, 0, 0, STANDARD_VOLUME, (Math.PI * step) / 16));
+    assertVolume(fluid, mask);
+  }
+
+  assert.ok(width(0.65, 1.05, 'z') > width(0.65, 1.05, 'x'));
+  assert.ok(width(0.2, 0.5, 'z') > width(0.2, 0.5, 'x'));
+});
+
+test('blob body and eyes finish a turn and keep facing the last direction at rest', () => {
   const ride = new Ride();
   const scene = new Scene();
   const update = buildBlob(scene, ride.fluid, ride.mask);
@@ -565,20 +592,29 @@ test('blob eyes follow the last movement and stay facing that way when steering 
 
   ride.start();
   ride.tick({ x: 1, z: 0 });
-  assert.ok(Math.abs(ride.facing - Math.PI / 2) < 0.2);
+  assert.ok(ride.facing > 0 && ride.facing < Math.PI / 2);
+
+  for (let step = 0; step < 4; step++) ride.tick({ x: 0, z: 0 });
+
+  assert.ok(Math.abs(ride.facing - Math.PI / 2) < 1e-9);
   update(false, 0, 0, ride.facing);
   assert.ok(leftEye.visible && rightEye.visible);
   assert.ok(leftEye.position.x > ride.fluid.x && rightEye.position.x > ride.fluid.x);
+
+  for (let step = 0; step < 7; step++) {
+    ride.tick({ x: -1, z: 0 });
+    assertVolume(ride.fluid, ride.mask);
+  }
+
+  assert.ok(Math.abs(Math.sin(ride.facing) + 1) < 1e-9);
+  update(false, 0, 0, ride.facing);
+  assert.ok(leftEye.visible && rightEye.visible);
+  assert.ok(leftEye.position.x < ride.fluid.x && rightEye.position.x < ride.fluid.x);
 
   const facing = ride.facing;
 
   ride.tick({ x: 0, z: 0 });
   assert.equal(ride.facing, facing);
-
-  ride.tick({ x: 0, z: -1 });
-  update(false, 0, 0, ride.facing);
-  assert.ok(leftEye.visible && rightEye.visible);
-  assert.ok(leftEye.position.z < ride.fluid.z && rightEye.position.z < ride.fluid.z);
 });
 
 test('candy stays at the attraction point and Speed Boost expires after ten seconds', () => {

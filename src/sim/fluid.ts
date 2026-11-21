@@ -1,20 +1,23 @@
 import { Grid } from './grid.ts';
 
+// center X, Y, Z and radii X, Y, Z in a body frame facing +Z.
 const body = [
-  [1.43, 0, 0.205, 0.24, 0.18],
-  [1.03, 0, 0.245, 0.38, 0.16],
-  [0.86, 0.28, 0.095, 0.37, 0.1],
-  [0.86, -0.28, 0.095, 0.37, 0.1],
-  [0.39, 0.125, 0.11, 0.41, 0.12],
-  [0.39, -0.125, 0.11, 0.41, 0.12],
+  [0, 1.43, 0.055, 0.205, 0.24, 0.18],
+  [0, 1.03, 0.02, 0.245, 0.38, 0.16],
+  [0.28, 0.86, 0.015, 0.095, 0.37, 0.1],
+  [-0.28, 0.86, 0.015, 0.095, 0.37, 0.1],
+  [0.125, 0.39, -0.025, 0.11, 0.41, 0.12],
+  [-0.125, 0.39, -0.025, 0.11, 0.41, 0.12],
 ];
 
 function bodyDistance(x: number, y: number, z: number) {
   let distance = Infinity;
 
-  for (const [centerY, centerZ, radiusX, radiusY, radiusZ] of body) {
+  for (const [centerX, centerY, centerZ, radiusX, radiusY, radiusZ] of body) {
     const normalized =
-      (x / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2 + ((z - centerZ) / radiusZ) ** 2;
+      ((x - centerX) / radiusX) ** 2 +
+      ((y - centerY) / radiusY) ** 2 +
+      ((z - centerZ) / radiusZ) ** 2;
 
     distance = Math.min(
       distance,
@@ -49,7 +52,7 @@ export class Fluid {
     this.visited = new Uint8Array(grid.size);
   }
 
-  step(blocked: Uint8Array, dx = 0, dz = 0, targetVolume = this.volume) {
+  step(blocked: Uint8Array, dx = 0, dz = 0, targetVolume = this.volume, facing = 0) {
     const previous = this.cells;
     const { grid, queue, reach, ranks, visited } = this;
     const x = this.x + dx;
@@ -89,13 +92,17 @@ export class Fluid {
 
     const candidates = queue.filter((id) => !blocked[id]);
     let comfortable = 0;
+    const cos = Math.cos(facing);
+    const sin = Math.sin(facing);
 
     for (const id of candidates) {
       const offset = id * 3;
+      const localX = grid.centers[offset] - x;
+      const localZ = grid.centers[offset + 2] - z;
       const rank = bodyDistance(
-        grid.centers[offset] - x,
+        localX * cos - localZ * sin,
         grid.centers[offset + 1],
-        grid.centers[offset + 2] - z,
+        localX * sin + localZ * cos,
       );
 
       ranks[id] = rank;

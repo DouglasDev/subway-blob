@@ -35,6 +35,7 @@ const ARRIVAL = 0.48;
 const DWELL = 6.3;
 const CLOSING = 3.6;
 const QUIET_SECONDS = (ARRIVAL + DWELL + CLOSING + TRAVEL) / 2;
+const TURN_RATE = 11;
 
 export type Input = { x: number; z: number };
 
@@ -77,6 +78,7 @@ export class Ride {
   shieldUntil = 0;
   expressUntil = 0;
   facing = 0;
+  private steeringHeading = 0;
   fanUntil = 0;
   private rawSqueeze = 0;
   private readonly random: () => number;
@@ -228,15 +230,18 @@ export class Ride {
     const dx = Math.max(-4.62, Math.min(4.62, this.fluid.x + input.x * speed)) - this.fluid.x;
     const dz = Math.max(-1.04, Math.min(1.04, this.fluid.z + input.z * speed)) - this.fluid.z;
 
-    const { x, z } = this.fluid;
+    if (dx * input.x + dz * input.z > 0.001) this.steeringHeading = Math.atan2(dx, dz);
+
+    const turn = this.steeringHeading - this.facing;
+    const shortestTurn = Math.atan2(Math.sin(turn), Math.cos(turn));
+    const maxTurn = TURN_RATE * STEP;
+
+    this.facing =
+      Math.abs(shortestTurn) <= maxTurn
+        ? this.steeringHeading
+        : this.facing + Math.sign(shortestTurn) * maxTurn;
 
     this.solveCrowd(dx, dz);
-    const movedX = this.fluid.x - x;
-    const movedZ = this.fluid.z - z;
-
-    if (movedX * dx + movedZ * dz > 0.001 * Math.hypot(dx, dz))
-      this.facing = Math.atan2(movedX, movedZ);
-
     const quiet = this.time < this.shieldUntil;
     const fanned = this.time < this.fanUntil;
     const pressure = crowdPressure(this.stop, this.rawSqueeze, this.crowd.congestion(this.fluid));
@@ -291,20 +296,31 @@ export class Ride {
     this.proposedMask.set(fixtures);
     this.crowd.occupy(grid, this.proposedMask, this.stop);
 
-    if (this.fluid.step(this.proposedMask, dx, dz, target)) {
+    if (this.fluid.step(this.proposedMask, dx, dz, target, this.facing)) {
       this.mask.set(this.proposedMask);
       this.rawSqueeze = this.fluid.pressure;
     } else {
-      if (target === this.fluid.volume || !this.fluid.step(this.proposedMask, dx, dz)) {
+      if (
+        target === this.fluid.volume ||
+        !this.fluid.step(this.proposedMask, dx, dz, this.fluid.volume, this.facing)
+      ) {
         this.crowd.yieldNear(saved, this.fluid);
         this.proposedMask.set(fixtures);
         this.crowd.occupy(grid, this.proposedMask, this.stop);
 
-        if (!this.fluid.step(this.proposedMask, dx, dz, Math.min(target, this.fluid.volume))) {
+        if (
+          !this.fluid.step(
+            this.proposedMask,
+            dx,
+            dz,
+            Math.min(target, this.fluid.volume),
+            this.facing,
+          )
+        ) {
           // The last mask and poses are valid even when a dense wave has to wait.
           this.crowd.riders = saved;
           this.proposedMask.set(this.mask);
-          this.fluid.step(this.mask, dx, dz, Math.min(target, this.fluid.volume));
+          this.fluid.step(this.mask, dx, dz, Math.min(target, this.fluid.volume), this.facing);
         }
       }
 
