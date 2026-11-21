@@ -2,7 +2,7 @@
   "$schema": "https://rcade.dev/manifest.schema.json",
   "name": "subway-blob",
   "display_name": "Subway Blob",
-  "description": "Steer a fixed-volume blob through a crowd on a northbound NYC subway train.",
+  "description": "Steer a fixed-volume blob through a crowd on the southbound NYC 4 train.",
   "visibility": "public",
   "authors": { "display_name": "DouglasDev" },
   "dependencies": [{ "name": "@rcade/input-classic", "version": "1.0.0" }]

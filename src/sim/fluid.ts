@@ -37,7 +37,7 @@ export class Fluid {
 
   constructor(
     readonly grid: Grid,
-    readonly volume: number,
+    public volume: number,
     x: number,
     z: number,
     private readonly flowLayers = 2,
@@ -49,7 +49,7 @@ export class Fluid {
     this.visited = new Uint8Array(grid.size);
   }
 
-  step(blocked: Uint8Array, dx = 0, dz = 0) {
+  step(blocked: Uint8Array, dx = 0, dz = 0, targetVolume = this.volume) {
     const previous = this.cells;
     const { grid, queue, reach, ranks, visited } = this;
     const x = this.x + dx;
@@ -104,13 +104,14 @@ export class Fluid {
     }
 
     candidates.sort((a, b) => ranks[a] - ranks[b] || a - b);
-    const chosen = this.findPlacement(candidates);
+    const chosen = this.findPlacement(candidates, targetVolume);
 
-    this.pressure = 1 - Math.min(comfortable / this.volume, 1);
+    this.pressure = 1 - Math.min(comfortable / targetVolume, 1);
 
     if (!chosen) return false;
 
     this.cells = chosen;
+    this.volume = targetVolume;
 
     // Follow displaced fluid, including when the preferred position is occupied.
     let centerX = 0;
@@ -127,7 +128,7 @@ export class Fluid {
     return true;
   }
 
-  private findPlacement(candidates: number[]) {
+  private findPlacement(candidates: number[], volume: number) {
     const { grid, ranks, visited } = this;
     const available = new Uint8Array(grid.size);
 
@@ -147,7 +148,7 @@ export class Fluid {
 
         chosen.push(id);
 
-        if (chosen.length === this.volume) return chosen;
+        if (chosen.length === volume) return chosen;
 
         for (let side = 0; side < 6; side++) {
           const neighbor = grid.neighbors[id * 6 + side];

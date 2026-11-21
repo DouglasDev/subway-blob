@@ -1,6 +1,6 @@
 # Subway Blob
 
-Steer a shape-changing blob through a northbound NYC 1 train, from South Ferry to 59 St–Columbus Circle. Use WASD, the arrow keys, or the on-screen movement pad. You score a stop when the doors close with your blob intact. Each stop takes on more riders than it lets off. The same boarding pattern repeats on every retry, and your best score is stored in the browser.
+Ride the southbound 4 from 149 St–Grand Concourse to Crown Hts–Utica Av. Steer a fixed-volume blob through a car that gets more crowded at each stop. You score when the doors close with your blob intact. A fresh ride randomizes pickups and encounters. Add `?seed=12071` to the standalone URL to replay a known layout and event schedule.
 
 ## Run locally
 
@@ -11,30 +11,32 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The Vite server listens on loopback. Open the local URL printed by the server in a browser with WebGL2.
+Open the loopback URL printed by Vite in a browser with WebGL2.
+
+## Controls
+
+| Platform          | Steer             | Start or retry        | Use the two held pickups | Toggle sound     |
+| ----------------- | ----------------- | --------------------- | ------------------------ | ---------------- |
+| Desktop           | WASD or arrows    | Enter or Start ride   | Z and X                  | M or Sound       |
+| Standalone mobile | Directional pad   | Start ride            | Labeled slot buttons     | Sound            |
+| RCade             | Player 1 joystick | A or one-player start | A and B                  | Two-player start |
+
+RCade’s web player maps the virtual controls to WASD, F, G, 1, and 2 by default. Add `?cabinet` locally to preview the 336 × 262 layout. The 4 train has its own best score. On the cabinet the score lasts for the current game session.
 
 ## Simulation
 
-The blob occupies 245 face-connected cells on a 10 cm grid, for a fixed simulated volume of 0.245 m³. The grid stops at 1.7 m above the floor and ends at the sides of the car. At each 20 Hz step the solver searches the previous occupied cells and up to two layers of adjacent open cells. It picks a connected group that fits the full volume and favors an upright silhouette near the steering position. The exposed cell faces form the rendered body. Its vertices are rounded for display while the solver keeps the full cell volume. The opening car holds 12 riders spread along its length, growing to 20 at South Ferry.
+The standard blob occupies 245 face-connected 10 cm cells. During an AC outage it can grow to 306 cells. Rider movement that cannot fit the blob is deferred while the player can still steer. High squeeze drains a full tolerance meter in 30 seconds. Moderate squeeze holds it and low squeeze restores it. Rider departures, props, pickup collisions, and timed encounters update in the 20 Hz simulation.
 
-Passengers follow scripted boarding paths. Layered collision proxies approximate legs, torsos, and heads, and reserve more room around riders as the crowd packs in. The Squeeze gauge shows how much of the blob's upright shape is blocked or beyond reach. A pop means the blob cannot fit its full volume into the connected space it can reach on that step.
+[The MTA 4 train schedule](https://www.mta.info/schedules/subway/4-train) supplies the route. See [audio credits](AUDIO.md) for field recordings and edits.
 
-Station names and order follow the [MTA subway map](https://www.mta.info/map/5256). Travel and boarding times are compressed for gameplay.
-
-## Controls and RCade
-
-- Desktop uses WASD or arrow keys. Press Enter to start or retry.
-- Phones and tablets use the on-screen directional pad and start button.
-- The RCade cabinet and web player use the Player 1 joystick and A button. The one-player start button also starts or retries. The game lays out at 336 × 262, with the 3D scene rendered at one device pixel per CSS pixel. Cabinet best scores last for the current game session.
-
-Append `?cabinet` to the local preview URL to inspect the compact layout with desktop keyboard controls. GitHub Actions builds the same app and publishes it through the official RCade action.
-
-## Verify
+## Verify and publish
 
 ```sh
-pnpm test
 pnpm run format
 pnpm run format:check
 pnpm run typecheck
+pnpm test
 pnpm run build
 ```
+
+The existing GitHub Actions workflow publishes the built app to RCade from the main branch.

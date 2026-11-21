@@ -48,6 +48,14 @@ export class Grid {
     return (x * this.height + y) * this.width + z;
   }
 
+  at(x: number, y: number, z: number) {
+    return this.index(
+      Math.floor(x / this.cell + this.length / 2),
+      Math.floor(y / this.cell),
+      Math.floor(z / this.cell + this.width / 2),
+    );
+  }
+
   point(id: number): Point {
     return { x: this.centers[id * 3], y: this.centers[id * 3 + 1], z: this.centers[id * 3 + 2] };
   }

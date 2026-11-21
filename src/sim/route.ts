@@ -1,0 +1,18 @@
+export const STATIONS = [
+  '149 St–Grand Concourse',
+  '138 St–Grand Concourse',
+  '125 St',
+  '86 St',
+  'Lexington Av/59 St',
+  'Grand Central–42 St',
+  '14 St–Union Sq',
+  'Brooklyn Bridge–City Hall',
+  'Fulton St',
+  'Wall St',
+  'Bowling Green',
+  'Borough Hall',
+  'Nevins St',
+  'Atlantic Av–Barclays Ctr',
+  'Franklin Av–Medgar Evers College',
+  'Crown Hts–Utica Av',
+];

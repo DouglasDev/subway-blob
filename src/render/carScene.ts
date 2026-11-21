@@ -11,7 +11,7 @@ import {
   CROSS_WIDTH,
   DOORS,
 } from '../sim/car.ts';
-import { STATIONS } from '../sim/crowd.ts';
+import { STATIONS } from '../sim/route.ts';
 import { addPoster, platformMaterials } from './platformArt';
 import { buildPlatformPeople } from './platformPeople';
 
@@ -108,7 +108,7 @@ export function buildCar(scene: T.Scene) {
   box(car, lamp, 0, 2.042, -0.94, CAR_LENGTH - 0.12, 0.022, 0.065);
   box(car, ink, 0, 1.91, back + 0.071, CAR_LENGTH, 0.16, 0.075);
 
-  for (const { x, length } of BENCHES) {
+  for (const { x, length } of [...BENCHES, { x: 0, length: 3.8 }]) {
     const opening = Math.min(length - 0.27, 3.29);
     const jamb = (length - opening) / 2;
 
@@ -126,11 +126,7 @@ export function buildCar(scene: T.Scene) {
     box(car, windowGlass, x, 1.385, back + 0.07, opening, 0.51, 0.015);
 
     for (const side of [-1, 1]) {
-      if (
-        Math.abs(x) > 3 &&
-        CROSS_SEATS.some((item) => Math.sign(item.x) === Math.sign(x) && Math.sign(item.z) === side)
-      )
-        continue;
+      if (x === 0) continue;
 
       const z = BENCH_Z * side;
       const count = Math.round(length / 0.47);
@@ -161,8 +157,6 @@ export function buildCar(scene: T.Scene) {
     box(car, steel, x, 0.18, z, CROSS_DEPTH, 0.36, CROSS_WIDTH);
     box(car, crossSeat, x, 0.414, z, CROSS_DEPTH, 0.105, CROSS_WIDTH);
     box(car, crossSeat, seatBack, 0.735, z, CROSS_BACK, 0.53, CROSS_WIDTH);
-    box(car, darkSteel, x, 0.467, z, CROSS_DEPTH - 0.022, 0.008, 0.012);
-    box(car, darkSteel, seatBack + direction * 0.052, 0.735, z, 0.007, 0.5, 0.012);
   }
 
   for (const [index, x] of [-3.95, -1.55, 1.55, 3.95].entries()) {
@@ -202,23 +196,37 @@ export function buildCar(scene: T.Scene) {
   }
 
   label(car, 2.05, 0.144, 0, 1.91, back + 0.117, '#19292a', (ctx) => {
-    ctx.fillStyle = '#e64437';
+    ctx.fillStyle = '#008a59';
     ctx.beginPath();
     ctx.arc(42, 36, 26, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#f8f3e7';
     ctx.font = 'bold 36px sans-serif';
-    ctx.fillText('1', 31, 49);
+    ctx.fillText('4', 30, 49);
     ctx.font = 'bold 30px monospace';
-    ctx.fillText('BROADWAY / 7 AV LOCAL', 91, 47);
+    ctx.fillText('LEXINGTON AV EXPRESS', 91, 47);
   });
+
+  for (const sign of [-1, 1]) {
+    const x = sign * (CAR_LENGTH / 2 + 0.23);
+    const body = x + sign * 1.85;
+
+    box(car, ink, x, 0.75, 0, 0.38, 1.54, 1.04);
+    box(car, darkSteel, body, -0.22, 0, 3.48, 0.42, 2.42);
+    box(car, steel, body, 2.06, 0, 3.48, 0.12, 2.35);
+    box(car, steel, body, 0.55, 1.13, 3.48, 1.12, 0.1);
+    box(car, panels, body, 1.04, -1.16, 3.48, 2, 0.13);
+    box(car, panels, x + sign * 0.13, 1.04, 0, 0.12, 2, 2.34);
+    box(car, glass, body, 1.44, 1.12, 1.19, 0.62, 0.07);
+    box(car, glass, body + sign * 0.98, 1.44, 1.12, 0.59, 0.62, 0.07);
+  }
 
   return (door: number) => {
     for (const { mesh, x, sign } of leaves) mesh.position.x = x + sign * door * 0.665;
   };
 }
 
-export function buildTrack(scene: T.Scene) {
+function buildPlatform(scene: T.Scene) {
   const platform = new T.Group();
 
   scene.add(platform);
@@ -263,6 +271,28 @@ export function buildTrack(scene: T.Scene) {
     }),
   );
 
+  let lastTime = -1;
+  let lastStation = -1;
+
+  return (x: number, station: number, time: number) => {
+    platform.position.x = x;
+    platform.visible = station < STATIONS.length;
+
+    if (!platform.visible || Math.abs(x) > 36 || (time === lastTime && station === lastStation))
+      return;
+
+    if (station !== lastStation) {
+      for (const [index, sign] of signs.entries()) sign.visible = index === station;
+    }
+
+    updatePlatformPeople(time, station);
+    lastTime = time;
+    lastStation = station;
+  };
+}
+
+export function buildTrack(scene: T.Scene) {
+  const platforms = [buildPlatform(scene), buildPlatform(scene)];
   const track = new T.Group();
 
   scene.add(track);
@@ -272,30 +302,35 @@ export function buildTrack(scene: T.Scene) {
   for (let index = -18; index <= 18; index++)
     box(track, darkSteel, index * 0.75, -0.53, 0, 0.2, 0.07, 2.03);
 
-  const tunnel = new T.Group();
+  const walls = Array.from({ length: 3 }, () =>
+    box(scene, darkSteel, 0, 1.1, -3.16, 1, 3.02, 0.15),
+  );
+  const ribs = Array.from({ length: 23 }, () => box(scene, ink, 0, 1.1, -3.06, 0.095, 3, 0.14));
 
-  scene.add(tunnel);
-
-  for (let index = -9; index <= 9; index++) {
-    box(tunnel, darkSteel, index * 2.15, 1.02, -3.18, 2.12, 3.3, 0.15);
-    box(tunnel, ink, index * 2.15, 1.02, -3.06, 0.12, 3.3, 0.14);
-
-    if (index % 2 === 0) box(tunnel, lamp, index * 2.15, 1.98, -2.94, 0.52, 0.034, 0.05);
+  function wall(index: number, from: number, to: number) {
+    walls[index].visible = to > from;
+    walls[index].position.x = (to + from) / 2;
+    walls[index].scale.x = Math.max(0.01, to - from);
   }
 
   return (stop: number, progress: number, moving: boolean, time: number) => {
-    const departing = progress < 0.5;
-    const offset = moving ? (departing ? progress : progress - 1) * 41 : 0;
+    const distance = 58;
+    const departing = moving ? progress * distance : 0;
+    const arriving = departing - distance;
+    const ahead = moving && stop + 1 < STATIONS.length;
 
-    platform.position.x = offset;
-    track.position.x = moving ? (time * 3.8) % 0.75 : 0;
-    tunnel.position.x = moving ? (time * 3.8) % 4.3 : 0;
-    tunnel.visible = moving;
-    platform.visible = Math.abs(offset) < 15;
+    platforms[stop % 2](departing, stop, time);
+    platforms[(stop + 1) % 2](arriving, ahead ? stop + 1 : STATIONS.length, time);
+    track.position.x = departing % 0.75;
+    wall(0, -58, (ahead ? arriving : departing) - 14);
+    wall(1, ahead ? arriving + 14 : departing - 14, departing - 14);
+    wall(2, departing + 14, 58);
 
-    if (platform.visible) updatePlatformPeople(time, moving && !departing ? stop + 1 : stop);
+    for (const [index, rib] of ribs.entries()) {
+      const x = (index - 11) * 2.15 + (departing % 2.15);
 
-    for (const [index, sign] of signs.entries())
-      sign.visible = index === (moving && !departing ? stop + 1 : stop);
+      rib.position.x = x;
+      rib.visible = Math.abs(x - departing) > 14.1 && (!ahead || Math.abs(x - arriving) > 14.1);
+    }
   };
 }

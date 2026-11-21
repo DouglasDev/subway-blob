@@ -14,16 +14,16 @@ export const BENCH_Z = CAR_WIDTH / 2 - BENCH_DEPTH / 2;
 
 export const BENCHES = [
   { x: -4.04, length: 1.45 },
-  { x: 0, length: 3.8 },
   { x: 4.04, length: 1.45 },
 ];
 
 export const CROSS_SEATS = [
-  { x: -3.77, z: -0.81, direction: 1 },
-  { x: 3.77, z: 0.81, direction: -1 },
+  { x: -1.28, z: -0.88, direction: 1 },
+  { x: 0.65, z: 0.88, direction: -1 },
+  { x: 1.26, z: -0.88, direction: 1 },
 ];
 
-export const CROSS_WIDTH = 0.74;
+export const CROSS_WIDTH = 0.59;
 
 export const CROSS_DEPTH = 0.46;
 
@@ -35,14 +35,6 @@ export function createCar() {
 
   for (const { x, length } of BENCHES) {
     for (const side of [-1, 1]) {
-      if (
-        CROSS_SEATS.some(
-          (seat) =>
-            Math.sign(seat.x) === Math.sign(x) && Math.sign(seat.z) === side && Math.abs(x) > 3,
-        )
-      )
-        continue;
-
       const z = side * BENCH_Z;
 
       grid.block(

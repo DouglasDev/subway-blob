@@ -5,6 +5,10 @@ export const Shell = styled.main`
   margin: 0 auto;
   padding: 27px clamp(16px, 4.6vw, 72px) 22px;
 
+  @media (max-width: 480px) {
+    padding: 15px 14px 12px;
+  }
+
   html[data-arcade='true'] & {
     width: min(100%, 336px);
     height: min(100svh, 262px);
@@ -21,6 +25,11 @@ export const Header = styled.header`
   gap: 18px;
   margin-bottom: 21px;
 
+  @media (max-width: 480px) {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
   html[data-arcade='true'] & {
     height: 28px;
     flex: none;
@@ -35,6 +44,12 @@ export const Brand = styled.div`
   gap: 12px;
   align-items: center;
 
+  @media (max-width: 480px) {
+    gap: 7px;
+    min-width: 0;
+    flex: 1;
+  }
+
   html[data-arcade='true'] & {
     gap: 5px;
   }
@@ -47,11 +62,16 @@ export const Bullet = styled.span`
   width: 2.35rem;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #e54939;
+  background: #008653;
   color: #fff6e7;
   font-weight: 790;
   font-size: 1.55rem;
   line-height: 1;
+
+  @media (max-width: 480px) {
+    width: 1.94rem;
+    font-size: 1.22rem;
+  }
 
   html[data-arcade='true'] & {
     width: 19px;
@@ -66,6 +86,11 @@ export const Title = styled.h1`
   line-height: 1.05;
   margin: 0;
 
+  @media (max-width: 480px) {
+    white-space: nowrap;
+    font-size: clamp(1.05rem, 4.6vw, 1.45rem);
+  }
+
   html[data-arcade='true'] & {
     font-size: 15px;
     letter-spacing: -0.03em;
@@ -78,6 +103,11 @@ export const Line = styled.div`
   color: #aeb9ac;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+
+  @media (max-width: 480px) {
+    font-size: 0.56rem;
+    letter-spacing: 0.05em;
+  }
 
   html[data-arcade='true'] & {
     display: none;
@@ -95,6 +125,12 @@ export const Best = styled.div`
   text-transform: uppercase;
   letter-spacing: 0.08em;
 
+  @media (max-width: 480px) {
+    gap: 4px;
+    font-size: 0.56rem;
+    letter-spacing: 0.035em;
+  }
+
   html[data-arcade='true'] & {
     display: flex;
     align-items: baseline;
@@ -109,6 +145,10 @@ export const BestValue = styled.strong`
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
+
+  @media (max-width: 480px) {
+    font-size: 0.81rem;
+  }
 
   html[data-arcade='true'] & {
     font-size: 10px;
@@ -204,7 +244,7 @@ export const RouteDot = styled.span`
     position: absolute;
     content: '';
     height: 2px;
-    background: #a45042;
+    background: #467d63;
     inset-inline: -6px;
     top: calc(50% - 1px);
   }
@@ -214,7 +254,7 @@ export const RouteDot = styled.span`
     content: '';
     height: 7px;
     width: 7px;
-    border: 2px solid #d98168;
+    border: 2px solid #75b188;
     border-radius: 50%;
     background: #21312b;
   }
@@ -222,8 +262,8 @@ export const RouteDot = styled.span`
   &[data-current='true']::after {
     width: 9px;
     height: 9px;
-    background: #f57b60;
-    border-color: #ffad8e;
+    background: #59b476;
+    border-color: #a8dbac;
     box-shadow: 0 0 0 3px #21312b;
   }
 
@@ -235,11 +275,11 @@ export const RouteDot = styled.span`
 export const Stage = styled.div`
   position: relative;
   background: #233335;
-  height: clamp(430px, calc(100svh - 248px), 740px);
+  height: clamp(430px, calc(100svh - 296px), 740px);
   overflow: hidden;
 
   @media (max-width: 650px) {
-    height: clamp(370px, calc(100svh - 255px), 620px);
+    height: clamp(245px, calc(100svh - 330px), 620px);
   }
 
   html[data-arcade='true'] & {
@@ -445,6 +485,12 @@ export const MetricName = styled.span`
   font: 0.64rem var(--mono);
   white-space: nowrap;
 
+  @media (max-width: 480px) {
+    font-size: 0.56rem;
+    line-height: 1.13;
+    white-space: normal;
+  }
+
   html[data-arcade='true'] & {
     font-size: 9px;
   }
@@ -478,6 +524,10 @@ export const GaugeCaption = styled.div`
   justify-content: space-between;
   gap: 4px;
   margin-bottom: 5px;
+
+  @media (max-width: 480px) {
+    gap: 3px;
+  }
 
   html[data-arcade='true'] & {
     margin-bottom: 3px;
@@ -513,7 +563,7 @@ export const GaugeBar = styled.progress`
   }
 
   &[data-high='true']::-webkit-progress-value {
-    background: #f4ab69;
+    background: #f08470;
   }
 
   &::-moz-progress-bar {
@@ -521,7 +571,7 @@ export const GaugeBar = styled.progress`
   }
 
   &[data-high='true'] {
-    color: #f4ab69;
+    color: #f08470;
   }
 
   html[data-arcade='true'] & {
@@ -614,5 +664,134 @@ export const PadButton = styled.button`
 
   html[data-arcade='true'] & {
     font-size: 12px;
+  }
+`;
+
+export const SoundButton = styled.button`
+  min-height: 42px;
+  padding: 5px 9px;
+  background: #20382e;
+  color: #e6eddb;
+  border: 1px solid #607e6a;
+  border-radius: 4px;
+  font: 0.69rem var(--mono);
+  cursor: pointer;
+
+  @media (max-width: 480px) {
+    min-height: 38px;
+    padding: 4px 6px;
+    font-size: 0.63rem;
+  }
+
+  html[data-arcade='true'] & {
+    min-height: 19px;
+    padding: 2px 4px;
+    font-size: 8px;
+  }
+`;
+
+export const Inventory = styled.div`
+  display: flex;
+  gap: 7px;
+  padding: 6px 12px;
+  background: #1b2a23;
+  border-top: 1px solid #3c5246;
+
+  html[data-arcade='true'] & {
+    flex: none;
+    padding: 2px 4px;
+    gap: 4px;
+  }
+`;
+
+export const InventorySlot = styled.button`
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 8px;
+  background: #384f36;
+  border: 1px solid #789968;
+  border-radius: 4px;
+  color: #eef1dc;
+  text-align: left;
+  font: 650 0.76rem var(--sans);
+  cursor: pointer;
+  touch-action: manipulation;
+
+  &:disabled {
+    background: #24332d;
+    border-color: #4c5c53;
+    color: #b3c2b4;
+    cursor: default;
+  }
+
+  html[data-arcade='true'] & {
+    min-height: 18px;
+    padding: 1px 4px;
+    font-size: 9px;
+  }
+`;
+
+export const InventoryKey = styled.kbd`
+  display: inline-block;
+  padding: 1px 4px;
+  margin-right: 4px;
+  color: #f3f2d8;
+  background: #16241c;
+  border-radius: 2px;
+  font: 0.65rem var(--mono);
+
+  html[data-arcade='true'] & {
+    font-size: 8px;
+  }
+`;
+
+export const EncounterNotice = styled.div`
+  position: absolute;
+  left: 16px;
+  top: 51px;
+  background: #493528ee;
+  color: #fae7b6;
+  border: 1px solid #926d4e;
+  border-radius: 4px;
+  padding: 6px 9px;
+  font: 0.69rem var(--mono);
+  pointer-events: none;
+
+  html[data-arcade='true'] & {
+    left: 5px;
+    top: 27px;
+    padding: 3px 4px;
+    font-size: 8px;
+  }
+`;
+
+export const Speech = styled.span`
+  position: absolute;
+  left: 50%;
+  top: 37%;
+  transform: translate(-50%, -100%);
+  max-width: min(52%, 220px);
+  z-index: 1;
+  background: #fff1cd;
+  color: #17251c;
+  border-radius: 7px;
+  padding: 7px 9px;
+  font: 650 0.79rem / 1.25 var(--sans);
+  text-align: center;
+  pointer-events: none;
+
+  &::after {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    content: '';
+    border: 5px solid transparent;
+    border-top-color: #fff1cd;
+  }
+
+  html[data-arcade='true'] & {
+    padding: 4px 6px;
+    font-size: 9px;
   }
 `;

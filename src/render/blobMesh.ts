@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { HOT_VOLUME } from '../sim/ride.ts';
 import type { Fluid } from '../sim/fluid.ts';
 import { roundSurface } from './smoothSurface';
 
@@ -45,7 +46,7 @@ const triangles = [0, 1, 2, 0, 2, 3];
 export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const group = new T.Group();
   const geometry = new T.BufferGeometry();
-  const maxVertices = fluid.volume * 36;
+  const maxVertices = Math.max(fluid.volume, HOT_VOLUME) * 36;
   const positions = new Float32Array(maxVertices * 3);
   const directions = new Float32Array(maxVertices * 3);
   const position = new T.BufferAttribute(positions, 3).setUsage(T.DynamicDrawUsage);
@@ -87,7 +88,20 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const towardCar = new T.Vector3(0, 0, -1);
   let previous: number[] | undefined;
 
-  return (popped: boolean) => {
+  const green = new T.Color(0xb6ec58);
+  const amber = new T.Color(0xffbc48);
+  const red = new T.Color(0xf74136);
+
+  return (popped: boolean, tolerance: number, wobble: number) => {
+    slime.color
+      .copy(tolerance > 0.5 ? green : amber)
+      .lerp(
+        tolerance > 0.5 ? amber : red,
+        tolerance > 0.5 ? (1 - tolerance) * 2 : 1 - tolerance * 2,
+      );
+
+    slime.emissive.copy(slime.color).multiplyScalar(0.38);
+    group.position.x = wobble * 0.048;
     group.visible = !popped;
 
     if (popped || fluid.cells === previous) return;
@@ -148,7 +162,7 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
 
       if (!hit) continue;
 
-      eye.position.copy(hit.point);
+      eye.position.copy(group.worldToLocal(hit.point));
       eye.position.z += 0.008;
       eye.visible = true;
     }
