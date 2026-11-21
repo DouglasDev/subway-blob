@@ -1,4 +1,7 @@
 import {
+  CANDY_SECONDS,
+  candyLocation,
+  EXPRESS_SECONDS,
   crowdPressure,
   DOUBLE_PICKUP_STOP,
   powerDeck,
@@ -7,6 +10,8 @@ import {
 } from '../src/sim/powers.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Scene } from 'three';
+import { buildBlob } from '../src/render/blobMesh.ts';
 import { STATIONS, stationIndex, travelDirection } from '../src/sim/route.ts';
 import {
   ENCOUNTERS,
@@ -447,7 +452,7 @@ test('late crowd pressure is capped and Quiet Bubble helps even during a jam', (
   assertVolume(ride.fluid, ride.mask);
 });
 
-test('Express Burst moves faster and Pocket Fan clears AC expansion while active', () => {
+test('Speed Boost moves faster and Pocket Fan clears AC expansion while active', () => {
   const standard = new Ride();
   const boosted = new Ride();
 
@@ -535,4 +540,46 @@ test('performers shift the nearby crowd and queue to exit when the encounter exp
   crowd.endEncounter();
   assert.equal(crowd.performer, undefined);
   assert.ok(actor.wantsExit);
+});
+
+test('blob eyes follow the last movement and stay facing that way when steering stops', () => {
+  const ride = new Ride();
+  const scene = new Scene();
+  const update = buildBlob(scene, ride.fluid, ride.mask);
+  const [, leftEye, rightEye] = scene.children[0].children;
+
+  ride.start();
+  ride.tick({ x: 1, z: 0 });
+  assert.ok(Math.abs(ride.facing - Math.PI / 2) < 0.2);
+  update(false, 0, 0, ride.facing);
+  assert.ok(leftEye.visible && rightEye.visible);
+  assert.ok(leftEye.position.x > ride.fluid.x && rightEye.position.x > ride.fluid.x);
+
+  const facing = ride.facing;
+
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.facing, facing);
+
+  ride.tick({ x: 0, z: -1 });
+  update(false, 0, 0, ride.facing);
+  assert.ok(leftEye.visible && rightEye.visible);
+  assert.ok(leftEye.position.z < ride.fluid.z && rightEye.position.z < ride.fluid.z);
+});
+
+test('candy stays at the attraction point and Speed Boost expires after ten seconds', () => {
+  const ride = new Ride();
+
+  ride.start();
+  const location = candyLocation(ride.fluid.x);
+
+  ride.inventory[0] = 'candy';
+  ride.inventory[1] = 'express';
+  ride.usePower(0);
+  ride.usePower(1);
+  ride.tick({ x: 1, z: 0 });
+
+  assert.deepEqual(ride.candy, { ...location, until: ride.time + CANDY_SECONDS });
+  assert.equal(ride.expressUntil, ride.time + EXPRESS_SECONDS);
+  ride.tick({ x: -1, z: 0 });
+  assert.deepEqual(ride.candy, { ...location, until: STEP + CANDY_SECONDS });
 });

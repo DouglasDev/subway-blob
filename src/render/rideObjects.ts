@@ -1,6 +1,7 @@
 import * as T from 'three';
 import type { Ride } from '../sim/ride.ts';
 import { POWERS } from '../sim/powers.ts';
+import { wrappedCandy } from './candy';
 import { buildGags, buildInstruments } from './gags';
 
 function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
@@ -16,14 +17,28 @@ export function buildRideObjects(scene: T.Scene) {
     const token = new T.Group();
     const jewel = part(token, new T.IcosahedronGeometry(0.13, 0), 0xffd061);
     const halo = part(token, new T.TorusGeometry(0.16, 0.016, 6, 16), 0xfffac0);
+    const sweet = wrappedCandy(0xff4d8f, 0xffc1de);
+
+    sweet.scale.setScalar(0.78);
+    token.add(sweet);
     const beacon = part(token, new T.CircleGeometry(0.24, 16), 0xd79849);
 
     beacon.rotation.x = -Math.PI / 2;
     beacon.position.y = 0.014;
     scene.add(token);
 
-    return { token, jewel, halo, beacon };
+    return { token, jewel, halo, beacon, sweet };
   });
+
+  const candyDisplay = new T.Group();
+  const sweets = [
+    wrappedCandy(0xff397c, 0xffa6d6),
+    wrappedCandy(0x47e5d6, 0xbaffed),
+    wrappedCandy(0xd685ff, 0xffe4a0),
+  ];
+
+  candyDisplay.add(...sweets);
+  scene.add(candyDisplay);
 
   const luggage = new Map<number, T.Group>();
   const stageMark = part(scene, new T.RingGeometry(0.44, 0.5, 20), 0xffc963);
@@ -80,7 +95,30 @@ export function buildRideObjects(scene: T.Scene) {
     const { pickups, time } = ride;
     const actor = ride.act;
 
-    for (const [index, { token, jewel, halo, beacon }] of tokens.entries()) {
+    const candy = ride.candy;
+
+    candyDisplay.visible = !!candy && candy.until > time && ride.phase !== 'popped';
+
+    if (candy && candyDisplay.visible) {
+      candyDisplay.position.set(candy.x, 1.48, candy.z);
+      const life = Math.min(1, (candy.until - time) * 4);
+
+      candyDisplay.scale.setScalar(life);
+
+      for (const [index, sweet] of sweets.entries()) {
+        const angle = time * 1.65 + (index * 2 * Math.PI) / sweets.length;
+
+        sweet.position.set(
+          Math.cos(angle) * 0.38,
+          Math.sin(angle * 2) * 0.18,
+          Math.sin(angle) * 0.38,
+        );
+
+        sweet.rotation.set(0.19, -angle, 0.22 * Math.sin(angle));
+      }
+    }
+
+    for (const [index, { token, jewel, halo, beacon, sweet }] of tokens.entries()) {
       const pickup = pickups[index];
 
       token.visible = !!pickup;
@@ -90,6 +128,10 @@ export function buildRideObjects(scene: T.Scene) {
       token.position.set(pickup.x, 0, pickup.z);
       jewel.position.y = pickup.y + Math.sin(time * 6 + index) * 0.055;
       jewel.rotation.set(time, index + time * 2.4, 0.2);
+      jewel.visible = pickup.power !== 'candy';
+      sweet.visible = !jewel.visible;
+      sweet.position.copy(jewel.position);
+      sweet.rotation.set(0.22, time * 2.4, 0.19);
       const color = POWERS[pickup.power].color;
 
       (jewel.material as T.MeshStandardMaterial).color.setHex(color);

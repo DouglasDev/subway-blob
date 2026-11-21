@@ -2,6 +2,7 @@ import { CROSS_DEPTH, CROSS_SEATS, CROSS_WIDTH, DOORS, HEIGHT_LIMIT } from './ca
 import { Grid } from './grid.ts';
 import { seededRandom } from './encounters.ts';
 import type { Encounter } from './encounters.ts';
+import { candyLocation, CANDY_SECONDS } from './powers.ts';
 import type { Power } from './powers.ts';
 
 export type Location = { x: number; z: number };
@@ -168,7 +169,7 @@ export class Crowd {
   ) {
     const radius = { crazy: 2.35, fart: 2, vomit: 1.46, annoy: 2.6, candy: 2.65, fan: 1.3 }[power];
     const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, candy: 0, fan: 0 }[power];
-    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: 10, fan: 7 }[power];
+    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: CANDY_SECONDS, fan: 7 }[power];
 
     const distance = (rider: Rider) => Math.hypot(rider.x - from.x, rider.z - from.z);
 
@@ -177,6 +178,7 @@ export class Crowd {
         (rider) => !rider.role && !rider.trajectory && !rider.wantsExit && distance(rider) < radius,
       )
       .sort((a, b) => distance(a) - distance(b));
+    const candy = candyLocation(from.x);
     const candyEnd = from.x < 0 ? 1 : -1;
 
     for (const [index, rider] of nearby.entries()) {
@@ -191,8 +193,8 @@ export class Crowd {
       rider.away =
         power === 'candy'
           ? {
-              x: from.x + candyEnd * (1.8 + (index % 4) * 0.26),
-              z: -0.48 + (index % 3) * 0.39,
+              x: candy.x + candyEnd * ((index % 4) - 1.5) * 0.26,
+              z: candy.z + ((index % 3) - 1) * 0.39,
               until: time + duration,
             }
           : {

@@ -12,7 +12,15 @@ import {
 import type { Cue, Encounter } from './encounters.ts';
 import { Fluid } from './fluid.ts';
 import { guestContent } from './guestContent.ts';
-import { crowdPressure, DOUBLE_PICKUP_STOP, powerDeck, QUIET_SECONDS } from './powers.ts';
+import {
+  candyLocation,
+  CANDY_SECONDS,
+  crowdPressure,
+  DOUBLE_PICKUP_STOP,
+  EXPRESS_SECONDS,
+  powerDeck,
+  QUIET_SECONDS,
+} from './powers.ts';
 import type { Power } from './powers.ts';
 import { stationIndex, travelDirection } from './route.ts';
 
@@ -41,6 +49,7 @@ export class Ride {
   readonly schedule: Map<number, Encounter>;
   readonly cues: Cue[] = [];
   pickups: Pickup[] = [];
+  candy: (Location & { until: number }) | null = null;
   encounter: {
     kind: Encounter;
     expires: number;
@@ -63,6 +72,7 @@ export class Ride {
   guestPressure = 0;
   shieldUntil = 0;
   expressUntil = 0;
+  facing = 0;
   fanUntil = 0;
   private rawSqueeze = 0;
   private readonly random: () => number;
@@ -209,7 +219,15 @@ export class Ride {
     const dx = Math.max(-4.62, Math.min(4.62, this.fluid.x + input.x * speed)) - this.fluid.x;
     const dz = Math.max(-1.04, Math.min(1.04, this.fluid.z + input.z * speed)) - this.fluid.z;
 
+    const { x, z } = this.fluid;
+
     this.solveCrowd(dx, dz);
+    const movedX = this.fluid.x - x;
+    const movedZ = this.fluid.z - z;
+
+    if (movedX * dx + movedZ * dz > 0.001 * Math.hypot(dx, dz))
+      this.facing = Math.atan2(movedX, movedZ);
+
     const quiet = this.time < this.shieldUntil;
     const fanned = this.time < this.fanUntil;
     const pressure = crowdPressure(this.stop, this.rawSqueeze, this.crowd.congestion(this.fluid));
@@ -300,8 +318,10 @@ export class Ride {
 
       if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + 0.25);
       else if (power === 'shield') this.shieldUntil = this.time + QUIET_SECONDS;
-      else if (power === 'express') this.expressUntil = this.time + 10;
+      else if (power === 'express') this.expressUntil = this.time + EXPRESS_SECONDS;
       else {
+        if (power === 'candy')
+          this.candy = { ...candyLocation(this.fluid.x), until: this.time + CANDY_SECONDS };
         if (power === 'fan') this.fanUntil = this.time + 14;
 
         this.crowd.react(power, this.fluid, this.time, this.phase === 'doors');

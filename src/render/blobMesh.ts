@@ -1,7 +1,7 @@
 import * as T from 'three';
 import { HOT_VOLUME } from '../sim/ride.ts';
 import type { Fluid } from '../sim/fluid.ts';
-import { roundSurface } from './smoothSurface';
+import { roundSurface } from './smoothSurface.ts';
 
 const faces = [
   [
@@ -85,14 +85,19 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
   const wet = new Uint8Array(fluid.grid.size);
   const ray = new T.Raycaster();
   const eyeOrigin = new T.Vector3();
-  const towardCar = new T.Vector3(0, 0, -1);
+  const forward = new T.Vector3();
+  const inward = new T.Vector3();
+  const eyePoints = [new T.Vector3(), new T.Vector3()];
+  let previousFacing = Infinity;
+  let previousX = Infinity;
+  let previousZ = Infinity;
   let previous: number[] | undefined;
 
   const green = new T.Color(0xb6ec58);
   const amber = new T.Color(0xffbc48);
   const red = new T.Color(0xf74136);
 
-  return (popped: boolean, heat: number, wobble: number) => {
+  return (popped: boolean, heat: number, wobble: number, facing: number) => {
     slime.color
       .copy(heat < 0.5 ? green : amber)
       .lerp(heat < 0.5 ? amber : red, heat < 0.5 ? heat * 2 : (heat - 0.5) * 2);
@@ -102,67 +107,101 @@ export function buildBlob(scene: T.Scene, fluid: Fluid, blocked: Uint8Array) {
     group.visible = !popped;
     group.position.y = 0.12 * Math.abs(wobble);
 
-    if (popped || fluid.cells === previous) return;
+    if (popped) return;
 
-    previous = fluid.cells;
-    wet.fill(0);
+    if (fluid.cells !== previous) {
+      previous = fluid.cells;
+      wet.fill(0);
 
-    for (const id of fluid.cells) wet[id] = 1;
+      for (const id of fluid.cells) wet[id] = 1;
 
-    const { grid } = fluid;
-    const boundary: number[][] = [];
-    const vertexWidth = grid.width + 1;
-    const vertexHeight = grid.height + 1;
-    const vertexLayer = vertexHeight * vertexWidth;
+      const { grid } = fluid;
+      const boundary: number[][] = [];
+      const vertexWidth = grid.width + 1;
+      const vertexHeight = grid.height + 1;
+      const vertexLayer = vertexHeight * vertexWidth;
 
-    for (const id of fluid.cells) {
-      const x = Math.floor(id / (grid.height * grid.width));
-      const y = Math.floor(id / grid.width) % grid.height;
-      const z = id % grid.width;
+      for (const id of fluid.cells) {
+        const x = Math.floor(id / (grid.height * grid.width));
+        const y = Math.floor(id / grid.width) % grid.height;
+        const z = id % grid.width;
 
-      for (let side = 0; side < 6; side++) {
-        if (wet[grid.neighbors[id * 6 + side]]) continue;
+        for (let side = 0; side < 6; side++) {
+          if (wet[grid.neighbors[id * 6 + side]]) continue;
 
-        const vertices = faces[side].map(
-          ([dx, dy, dz]) => (x + dx) * vertexLayer + (y + dy) * vertexWidth + z + dz,
+          const vertices = faces[side].map(
+            ([dx, dy, dz]) => (x + dx) * vertexLayer + (y + dy) * vertexWidth + z + dz,
+          );
+
+          boundary.push(vertices);
+        }
+      }
+
+      const vertices = roundSurface(boundary, grid, blocked);
+      let cursor = 0;
+
+      for (const face of boundary) {
+        for (const point of triangles) {
+          const vertex = vertices.get(face[point])!;
+
+          vertex.position.toArray(positions, cursor);
+          vertex.normal.toArray(directions, cursor);
+          cursor += 3;
+        }
+      }
+
+      geometry.setDrawRange(0, cursor / 3);
+      position.needsUpdate = true;
+      direction.needsUpdate = true;
+    } else if (facing === previousFacing && fluid.x === previousX && fluid.z === previousZ) {
+      return;
+    }
+
+    previousFacing = facing;
+    previousX = fluid.x;
+    previousZ = fluid.z;
+    forward.set(Math.sin(facing), 0, Math.cos(facing));
+    inward.copy(forward).negate();
+    group.updateMatrixWorld(true);
+
+    for (const eye of eyes) eye.visible = false;
+
+    // Cast onto the current surface so the eyes also follow compressed shapes.
+    for (const [height, spacing] of [
+      [1.46, 0.075],
+      [1.2, 0.067],
+      [0.91, 0.06],
+      [0.58, 0.055],
+    ]) {
+      let hits = 0;
+
+      for (const [index, point] of eyePoints.entries()) {
+        const side = index ? spacing : -spacing;
+
+        eyeOrigin.set(
+          fluid.x + forward.x * 2 + forward.z * side,
+          height,
+          fluid.z + forward.z * 2 - forward.x * side,
         );
 
-        boundary.push(vertices);
+        ray.set(group.localToWorld(eyeOrigin), inward);
+        const hit = ray.intersectObject(mesh, false)[0];
+
+        if (hit) {
+          point.copy(group.worldToLocal(hit.point)).addScaledVector(forward, 0.012);
+          hits++;
+        }
       }
-    }
 
-    const vertices = roundSurface(boundary, grid, blocked);
-    let cursor = 0;
+      if (hits !== eyes.length) continue;
 
-    for (const face of boundary) {
-      for (const point of triangles) {
-        const vertex = vertices.get(face[point])!;
-
-        vertex.position.toArray(positions, cursor);
-        vertex.normal.toArray(directions, cursor);
-        cursor += 3;
+      for (const [index, eye] of eyes.entries()) {
+        eye.position.copy(eyePoints[index]);
+        eye.rotation.y = facing;
+        eye.visible = true;
       }
-    }
 
-    geometry.setDrawRange(0, cursor / 3);
-    position.needsUpdate = true;
-    direction.needsUpdate = true;
-
-    for (const [index, eye] of eyes.entries()) {
-      eye.visible = false;
-
-      if (fluid.pressure >= 0.42) continue;
-
-      const x = fluid.x + (index ? 0.075 : -0.075);
-
-      ray.set(eyeOrigin.set(x, 1.461, 1.3), towardCar);
-      const hit = ray.intersectObject(mesh, false)[0];
-
-      if (!hit) continue;
-
-      eye.position.copy(group.worldToLocal(hit.point));
-      eye.position.z += 0.008;
-      eye.visible = true;
+      break;
     }
   };
 }

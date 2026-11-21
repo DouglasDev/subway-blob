@@ -120,7 +120,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
       const heat = Math.max(1 - ride.tolerance, ride.squeeze, ride.guestPressure * 0.52);
 
-      updateBlob(popped, heat, crazy ? Math.sin(ride.time * 28) : 0);
+      updateBlob(popped, heat, crazy ? Math.sin(ride.time * 28) : 0, ride.facing);
 
       if (popped) {
         popTime += dt;

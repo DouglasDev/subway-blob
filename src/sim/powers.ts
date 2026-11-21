@@ -8,7 +8,7 @@ const catalog = {
   candy: { name: 'Sell Candy', color: 0xff81ae, weight: 2 },
   cool: { name: 'Cool Pack', color: 0x8de8ff, weight: 2 },
   shield: { name: 'Quiet Bubble', color: 0x70a8ff, weight: 3 },
-  express: { name: 'Express Burst', color: 0xffdc73, weight: 2 },
+  express: { name: 'Speed Boost', color: 0xffdc73, weight: 2 },
   fan: { name: 'Pocket Fan', color: 0x72e6c6, weight: 2 },
 } as const;
 
@@ -19,6 +19,14 @@ export const POWERS = catalog;
 export const DOUBLE_PICKUP_STOP = 7;
 
 export const QUIET_SECONDS = 18;
+
+export const EXPRESS_SECONDS = 10;
+
+export const CANDY_SECONDS = 10;
+
+export function candyLocation(x: number) {
+  return { x: x + (x < 0 ? 2.19 : -2.19), z: -0.09 };
+}
 
 export function powerDeck(random: () => number) {
   const stock = (Object.keys(catalog) as Power[]).flatMap((kind) =>
