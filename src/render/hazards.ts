@@ -1,7 +1,7 @@
 import * as T from 'three';
 import { CAR_LENGTH, CAR_WIDTH } from '../sim/car.ts';
 import type { Ride } from '../sim/ride.ts';
-import { PA_FEEDBACK_SECONDS, SODA_RADIUS } from '../sim/hazards.ts';
+import { PA_FEEDBACK_SECONDS, SODA_EDGE } from '../sim/hazards.ts';
 
 function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
   const mesh = new T.Mesh(geometry, new T.MeshStandardMaterial({ color, roughness: 0.52 }));
@@ -86,22 +86,47 @@ export function buildHazards(car: T.Object3D) {
   });
 
   const spill = new T.Group();
-  const outline = new T.Shape();
-
-  for (let i = 0; i < 48; i++) {
-    const angle = (i / 48) * Math.PI * 2;
-    const radius = SODA_RADIUS * (0.89 + 0.08 * Math.sin(angle * 5) + 0.06 * Math.sin(angle * 9));
-
-    if (i === 0) outline.moveTo(radius, 0);
-    else outline.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius * 0.86);
-  }
-
-  outline.closePath();
-  const puddle = part(spill, new T.ShapeGeometry(outline), 0x8f4723);
+  const spillUniforms = {
+    center: { value: new T.Vector2() },
+    radius: { value: 0 },
+    room: { value: dangerUniforms.room.value },
+  };
+  const [base, rippleEdge, flecks] = SODA_EDGE;
+  const puddle = new T.Mesh(
+    new T.PlaneGeometry(CAR_LENGTH, CAR_WIDTH),
+    new T.ShaderMaterial({
+      uniforms: spillUniforms,
+      vertexShader: `
+      varying vec2 floorUV;
+      void main() {
+        floorUV = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+      fragmentShader: `
+      varying vec2 floorUV;
+      uniform vec2 center;
+      uniform float radius;
+      uniform vec2 room;
+      void main() {
+        vec2 point = vec2(floorUV.x - 0.5, 0.5 - floorUV.y) * room - center;
+        float angle = dot(point, point) > 0.00000001 ? atan(point.y, point.x) : 0.0;
+        float edge = radius * (${base} + ${rippleEdge} * sin(angle * 5.0) + ${flecks} * sin(angle * 9.0));
+        float inset = edge - length(point);
+        if (inset < 0.0) discard;
+        float lip = (1.0 - smoothstep(0.009, 0.05, inset)) * (0.58 + 0.42 * cos(angle + 0.9));
+        float sheen = smoothstep(0.78, 0.98, sin(point.x * 19.0 + sin(point.y * 31.0) * 0.5)) * 0.12;
+        vec3 color = vec3(0.47, 0.22, 0.105) + (lip * 0.42 + sheen) * vec3(1.0, 0.68, 0.38);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    }),
+  );
 
   puddle.rotation.x = -Math.PI / 2;
-  puddle.material.roughness = 0.13;
-  puddle.material.emissive.setHex(0x391a07);
+  puddle.position.y = 0.017;
+  puddle.visible = false;
+  car.add(puddle);
   const can = new T.Group();
 
   can.position.set(0.49, 0.081, -0.26);
@@ -111,20 +136,6 @@ export function buildHazards(car: T.Object3D) {
   for (const side of [-1, 1])
     part(can, new T.CylinderGeometry(0.062, 0.062, 0.018, 10), 0xd6d3c5).position.y = side * 0.084;
   spill.add(can);
-
-  for (let i = 0; i < 23; i++) {
-    const angle = i * 2.39996;
-    const distance = (0.24 + (i % 9) * 0.061) * SODA_RADIUS;
-    const shine = part(
-      spill,
-      new T.CircleGeometry(0.009 + (i % 5) * 0.007, 8),
-      i % 3 ? 0xc77c41 : 0xe8af6d,
-    );
-
-    shine.position.set(Math.cos(angle) * distance, 0.0027, Math.sin(angle) * distance * 0.81);
-    shine.rotation.x = -Math.PI / 2;
-    shine.scale.x = 1.4;
-  }
 
   car.add(spill, speaker);
   speaker.visible = spill.visible = false;
@@ -145,10 +156,17 @@ export function buildHazards(car: T.Object3D) {
     }
 
     speaker.visible = !!location && event?.kind === 'speaker';
-    spill.visible = !!location && event?.kind === 'soda';
-    if (!location || !event) return;
+    const soda = ride.sodaSpill;
 
-    if (spill.visible) spill.position.set(location.x, 0.017, location.z);
+    spill.visible = puddle.visible = !!soda;
+
+    if (soda) {
+      spill.position.set(soda.x, 0.017, soda.z);
+      spillUniforms.center.value.set(soda.x, soda.z);
+      spillUniforms.radius.value = soda.radius;
+    }
+
+    if (!location || !event) return;
 
     if (speaker.visible) {
       speaker.position.set(location.x, 1.96, location.z);

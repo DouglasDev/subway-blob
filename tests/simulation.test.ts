@@ -30,12 +30,14 @@ import {
 } from '../src/sim/encounters.ts';
 import type { Encounter } from '../src/sim/encounters.ts';
 import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
-import { Crowd } from '../src/sim/crowd.ts';
+import { Crowd, SKIN_TONES } from '../src/sim/crowd.ts';
 import { Fluid } from '../src/sim/fluid.ts';
 import {
   GUEST_RADIUS,
   RHINO_PRANK,
   SNEEZE_SECONDS,
+  sodaContains,
+  sodaRadius,
   SPREADER_SEATS,
   SPREADER_X,
   SPREADER_Z,
@@ -159,11 +161,11 @@ test('a full 4 train ride preserves the legal volume and awards no point for a p
 
   assert.equal(idle.phase, 'popped');
   assert.ok(idle.score === idle.stop || idle.score === idle.stop + 1);
-  assert.ok(idle.score > 3);
+  assert.ok(idle.score > 0);
   assert.equal(idle.tolerance, 0);
 });
 
-test('the opening crowd is distributed and the first 4 train stop stays gentle', () => {
+test('the fuller first boarding wave still distributes riders through the car', () => {
   const ride = new Ride();
 
   const counts = () =>
@@ -187,7 +189,7 @@ test('the opening crowd is distributed and the first 4 train stop stays gentle',
   }
 
   assert.equal(ride.score, 1);
-  assert.equal(ride.crowd.onboard, 20);
+  assert.equal(ride.crowd.onboard, 22);
   assert.ok(Math.min(...counts()) >= 3);
   assert.ok(peak < 0.35);
 });
@@ -275,6 +277,7 @@ test('every encounter can move across the schedule and two-stop acts reserve the
     const schedule = create(seed);
 
     assert.equal(schedule.size, Object.keys(ENCOUNTERS).length);
+    assert.ok([...schedule].some(([stop, kind]) => stop <= 2 && hasGuest(kind)));
 
     for (const [stop, kind] of schedule) {
       const starts = positions.get(kind) ?? new Set<number>();
@@ -430,6 +433,7 @@ test('the opening starts at zero Squished and the extra damage tapers across six
 
   assert.equal(ride.tolerance, 1);
   assert.equal(ride.damageMultiplier, 1.6);
+  assert.equal(ride.guestDamageMultiplier, 1.35);
   const firstStop = squeezeTolerance(1, 0.75, 1, false, 0, ride.damageMultiplier);
 
   ride.score = 3;
@@ -437,6 +441,7 @@ test('the opening starts at zero Squished and the extra damage tapers across six
 
   ride.score = 6;
   assert.equal(ride.damageMultiplier, 1);
+  assert.equal(ride.guestDamageMultiplier, 1);
   const sixthStop = squeezeTolerance(1, 0.75, 1, false, 0, ride.damageMultiplier);
 
   assert.ok(firstStop < thirdStop && thirdStop < sixthStop);
@@ -556,9 +561,9 @@ test('late crowd pressure is capped and Quiet Bubble helps even during a jam', (
   ride.inventory[0] = 'shield';
   ride.usePower(0);
 
-  for (let index = 0; index < 20; index++) ride.tick({ x: 0, z: 0 });
+  for (let index = 0; index < 40; index++) ride.tick({ x: 0, z: 0 });
 
-  assert.ok(ride.tolerance > 0.67);
+  assert.ok(ride.tolerance > 0.65);
   assertVolume(ride.fluid, ride.mask);
 });
 
@@ -926,6 +931,81 @@ test('Slime Spray only hits the cone in front of the blob', () => {
   ride.crowd.react('vomit', { x: 0, z: 0 }, 1, false, -Math.PI / 2);
   assert.equal(front.powerExit, true);
   assert.equal(rear.powerExit, undefined);
+});
+
+test('soda spreads over six seconds and becomes sticky at the expanding irregular edge', () => {
+  assert.equal(sodaRadius(-1), 0.68);
+  assert.equal(sodaRadius(6), 1.04);
+  assert.equal(sodaRadius(12), 1.04);
+  assert.ok(sodaRadius(1) < sodaRadius(2) && sodaRadius(2) < sodaRadius(5));
+  assert.equal(sodaContains(0.8, 0, sodaRadius(0)), false);
+  assert.equal(sodaContains(0.8, 0, sodaRadius(6)), true);
+  assert.equal(sodaContains(0.8, 0.62, sodaRadius(6)), false);
+  assert.notEqual(sodaContains(0, 0.98, 1.04), sodaContains(0, -0.98, 1.04));
+});
+
+test('passive recovery waits for continuous safe time and resets in soda', () => {
+  const ride = new Ride();
+  const idle = { x: 0, z: 0 };
+
+  ride.phase = 'running';
+  ride.crowd.riders = [];
+  ride.tolerance = 0.5;
+
+  for (let tick = 0; tick < 24; tick++) ride.tick(idle);
+  assert.equal(ride.tolerance, 0.5);
+  ride.tick(idle);
+  assert.ok(ride.tolerance > 0.5);
+
+  ride.encounter = {
+    kind: 'soda',
+    began: ride.time,
+    expires: 1,
+    variant: 0,
+    dialogueAt: 0,
+    location: idle,
+  };
+
+  ride.tick(idle);
+  assert.ok(ride.sticky);
+  const hurt = ride.tolerance;
+
+  ride.encounter = null;
+  for (let tick = 0; tick < 24; tick++) ride.tick(idle);
+  assert.equal(ride.tolerance, hurt);
+  ride.tick(idle);
+  assert.ok(ride.tolerance > hurt);
+});
+
+test('guest and passenger tones cycle independently and replay deterministically', () => {
+  const draw = (seed: number, stopOffset: number) => {
+    const crowd = new Crowd(seed);
+    const guests: number[] = [];
+    const passengers = crowd.riders.map((rider) => rider.skinTone);
+
+    for (let stop = 0; stop < 18; stop++) {
+      crowd.riders = [];
+      crowd.prepare(stop + stopOffset, 'shover');
+
+      guests.push(crowd.riders[0].skinTone);
+      passengers.push(...crowd.riders.slice(1).map((rider) => rider.skinTone));
+    }
+
+    return { guests, passengers };
+  };
+
+  const first = draw(12071, 0);
+
+  assert.deepEqual(first, draw(12071, 0));
+  assert.deepEqual(first.guests, draw(12071, 9).guests);
+
+  for (const tones of [first.guests, first.passengers]) {
+    for (let offset = 0; offset + 6 <= tones.length; offset += 6) {
+      assert.deepEqual(new Set(tones.slice(offset, offset + 6)), new Set(SKIN_TONES));
+    }
+  }
+
+  assert.ok(new Set(Array.from({ length: 18 }, (_, seed) => draw(seed, 0).guests[0])).size > 1);
 });
 
 test('sticky soda slows steering and chips away at the Squished meter', () => {

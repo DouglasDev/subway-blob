@@ -67,6 +67,15 @@ export function encounterSchedule(start: number, random: () => number) {
     [...encounters, ...new Array<null>(quiet).fill(null)],
     random,
   );
+
+  const damagingGuest = (kind: Encounter | null) => kind !== null && hasGuest(kind);
+
+  if (start === 0 && !slots.slice(0, 3).some(damagingGuest)) {
+    const swap = slots.findIndex(damagingGuest);
+
+    [slots[2], slots[swap]] = [slots[swap], slots[2]];
+  }
+
   const schedule = new Map<number, Encounter>();
   let stop = start;
 
@@ -79,6 +88,10 @@ export function encounterSchedule(start: number, random: () => number) {
   return schedule;
 }
 
+export function lowSqueeze(smoker: boolean) {
+  return smoker ? 0.14 : 0.21;
+}
+
 export function squeezeTolerance(
   value: number,
   squeeze: number,
@@ -86,11 +99,12 @@ export function squeezeTolerance(
   smoker = false,
   guest = 0,
   damageMultiplier = 1,
+  canRecover = true,
 ) {
-  const low = smoker ? 0.14 : 0.21;
+  const low = lowSqueeze(smoker);
   const high = smoker ? 0.6 : 0.75;
 
-  if (squeeze < low && guest === 0) return Math.min(1, value + dt / 15);
+  if (squeeze < low && guest === 0) return canRecover ? Math.min(1, value + dt / 15) : value;
 
   const strain = Math.max(0, Math.min(1, (squeeze - low) / (high - low)));
   const drain = (strain * (0.38 + 0.62 * strain)) / 30 + guest / 95;

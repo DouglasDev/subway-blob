@@ -7,6 +7,7 @@ import {
   encounterSchedule,
   guestProximity,
   hasGuest,
+  lowSqueeze,
   seededRandom,
   squeezeTolerance,
 } from './encounters.ts';
@@ -16,7 +17,8 @@ import {
   SHOVE_DURATION,
   SHOVE_RANGE,
   SODA_DRAIN,
-  SODA_RADIUS,
+  sodaContains,
+  sodaRadius,
   SODA_SPEED,
   GUEST_RADIUS,
   SPEAKER_RADIUS,
@@ -56,6 +58,7 @@ const TURN_RATE = 11;
 const REACTION_DELAY = 2;
 const EARLY_DAMAGE_MULTIPLIER = 1.6;
 const DAMAGE_TAPER_STOPS = 6;
+const RECOVERY_DELAY = 1.25;
 
 export type Input = { x: number; z: number };
 
@@ -120,6 +123,7 @@ export class Ride {
   rhinoImpactAt = -Infinity;
   private readonly ambience: () => number;
   private rawSqueeze = 0;
+  private safeTime = 0;
   private readonly random: () => number;
   private readonly guestRandom: () => number;
   private readonly verdictRandom: () => number;
@@ -175,6 +179,17 @@ export class Ride {
     const progress = Math.min(1, this.score / DAMAGE_TAPER_STOPS);
 
     return 1 + (EARLY_DAMAGE_MULTIPLIER - 1) * (1 - progress);
+  }
+
+  get guestDamageMultiplier() {
+    return 1 + 0.35 * Math.max(0, 1 - this.score / 5);
+  }
+
+  get sodaSpill() {
+    const event = this.encounter;
+
+    if (event?.kind === 'soda' && event.location)
+      return { ...event.location, radius: sodaRadius(this.time - event.began) };
   }
 
   get guestDanger() {
@@ -328,9 +343,9 @@ export class Ride {
     this.activatePowers();
     this.landOmny();
     const encounter = this.encounter;
-    const soda = encounter?.kind === 'soda' ? encounter.location : undefined;
+    const soda = this.sodaSpill;
 
-    this.sticky = !!soda && Math.hypot(this.fluid.x - soda.x, this.fluid.z - soda.z) < SODA_RADIUS;
+    this.sticky = !!soda && sodaContains(this.fluid.x - soda.x, this.fluid.z - soda.z, soda.radius);
     this.updateShove();
     const impulse = this.shove ? Math.max(0, 1 - (this.time - this.shove.at) / SHOVE_DURATION) : 0;
     const speed =
@@ -363,13 +378,28 @@ export class Ride {
 
     this.updateGuest();
 
+    this.sticky = !!soda && sodaContains(this.fluid.x - soda.x, this.fluid.z - soda.z, soda.radius);
+    const strain = quiet
+      ? Math.min(this.squeeze, load)
+      : this.rawSqueeze === 1
+        ? pressure
+        : this.squeeze;
+    const smoker = !quiet && encounter?.kind === 'smoker';
+    const riderDamage = encounter && hasGuest(encounter.kind) ? this.guestDamageMultiplier : 1;
+
+    this.safeTime =
+      strain < lowSqueeze(smoker) && this.guestPressure === 0 && !this.sticky
+        ? this.safeTime + STEP
+        : 0;
+
     const nextTolerance = squeezeTolerance(
       this.tolerance,
-      quiet ? Math.min(this.squeeze, load) : this.rawSqueeze === 1 ? pressure : this.squeeze,
+      strain,
       STEP,
-      !quiet && this.encounter?.kind === 'smoker',
-      this.guestPressure,
+      smoker,
+      this.guestPressure * riderDamage,
       this.damageMultiplier,
+      this.safeTime + 1e-9 >= RECOVERY_DELAY,
     );
 
     this.tolerance = this.sticky

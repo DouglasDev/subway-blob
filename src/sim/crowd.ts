@@ -9,7 +9,7 @@ import {
   spreaderSitting,
   sprayHits,
 } from './hazards.ts';
-import { hasGuest, seededRandom } from './encounters.ts';
+import { hasGuest, seededRandom, shuffle } from './encounters.ts';
 import type { Encounter } from './encounters.ts';
 import { omnyLocation, OMNY_SECONDS } from './powers.ts';
 import type { Power } from './powers.ts';
@@ -20,6 +20,7 @@ type Slot = Location & { key: number; zone: number; priority: number };
 
 export type Rider = Location & {
   id: number;
+  skinTone: number;
   slot: Slot;
   heading: number;
   stride: number;
@@ -32,10 +33,23 @@ export type Rider = Location & {
   away?: Location & { until: number };
 };
 
-const BOARDING = [10, 5, 5, 6, 6, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10];
+const BOARDING = [12, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10];
 const ZONES = 5;
 const POWER_EXITS = 2;
 const LIGHT_STOP_POWER_EXITS = 4;
+
+export const SKIN_TONES = [0xdfa982, 0x8e5040, 0xb87752, 0x58362b, 0xe8ba98, 0xa66b52];
+
+function skinDeck(seed: number) {
+  const random = seededRandom(seed);
+  let bag: number[] = [];
+
+  return () => {
+    if (bag.length === 0) bag = shuffle([...SKIN_TONES], random);
+
+    return bag.pop()!;
+  };
+}
 
 export class Crowd {
   riders: Rider[] = [];
@@ -45,12 +59,16 @@ export class Crowd {
   private readonly slots: Slot[] = [];
   private serial = 0;
   private readonly random: () => number;
+  private readonly passengerSkin: () => number;
+  private readonly guestSkin: () => number;
   private readonly boardingRandom: () => number;
   private nextLightStop: number;
   private powerExitsLeft = 0;
 
   constructor(seed: number) {
     this.random = seededRandom(seed);
+    this.passengerSkin = skinDeck(Math.imul(seed ^ 0xc6217ee9, 0x9e3779b1));
+    this.guestSkin = skinDeck(Math.imul(seed ^ 0xa0e128b3, 0x85ebca6b));
     this.boardingRandom = seededRandom(Math.imul(seed ^ 0xad9f381d, 0x9e3779b1));
     this.nextLightStop = 4 + Math.floor(this.boardingRandom() * 3);
 
@@ -129,7 +147,8 @@ export class Crowd {
       const lane = -0.24 + (index % 3) * 0.24;
       const approach = { x: slot.x + Math.sign(slot.x || 1) * 0.14, z: lane };
 
-      const rider = this.createRider(slot, start, 0);
+      const role = index === 0 && encounter && hasGuest(encounter) ? encounter : undefined;
+      const rider = this.createRider(slot, start, 0, role);
 
       rider.trajectory = {
         points: [start, { x: door, z: lane }, approach, slot],
@@ -139,15 +158,13 @@ export class Crowd {
         exits: false,
       };
 
-      if (index === 0 && encounter && hasGuest(encounter)) {
-        const { x, z } =
-          guest ?? (encounter === 'spreader' ? { x: SPREADER_X, z: SPREADER_Z } : slot);
+      if (role) {
+        const { x, z } = guest ?? (role === 'spreader' ? { x: SPREADER_X, z: SPREADER_Z } : slot);
         const entry = this.door(x);
 
         rider.x = entry;
         rider.trajectory.points[0] = { x: entry, z: start.z };
         rider.trajectory.points[1] = { x: entry, z: lane };
-        rider.role = encounter;
         rider.prop = undefined;
         rider.slot = { ...slot, x, z };
         rider.trajectory.points.splice(-2, 2, { x, z: lane }, rider.slot);
@@ -452,8 +469,17 @@ export class Crowd {
     this.onboard = this.riders.filter(({ z }) => z >= -1.2).length;
   }
 
-  private createRider(slot: Slot, position: Location, heading: number): Rider {
-    const rider: Rider = { id: this.serial++, slot, ...position, heading, stride: 0 };
+  private createRider(slot: Slot, position: Location, heading: number, role?: Encounter): Rider {
+    const skinTone = role ? this.guestSkin() : this.passengerSkin();
+    const rider: Rider = {
+      id: this.serial++,
+      skinTone,
+      slot,
+      ...position,
+      heading,
+      stride: 0,
+      role,
+    };
     const draw = this.random();
 
     if (draw < 0.18 && slot.x < 3.75 && Math.abs(slot.z) < 0.75) {
@@ -565,7 +591,8 @@ export class Crowd {
   }
 
   occupy(grid: Grid, mask: Uint8Array, stop: number) {
-    const packed = Math.min(1, Math.max(0, (stop - 2) / 11));
+    // Leave usable gaps between collision shapes when the slots fill.
+    const packed = Math.min(0.72, Math.max(0, (stop - 2) / 11));
     const shoulderX = 0.16 + 0.09 * packed;
     const shoulderZ = 0.23 + 0.02 * packed;
 

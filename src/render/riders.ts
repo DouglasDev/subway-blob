@@ -1,12 +1,12 @@
 import * as T from 'three';
+import { SKIN_TONES } from '../sim/crowd.ts';
 import type { Rider } from '../sim/crowd.ts';
 import { SPREADER_LEG, spreaderHeading, spreaderSitting } from '../sim/hazards.ts';
 import { garment, riderStyle, shirts } from './wardrobe';
 import { buildSneezeSpray } from './sneezeSpray';
 
-type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role' | 'trajectory'>;
-
-const skins = [0xdfa982, 0x8e5040, 0xb87752, 0x58362b, 0xe8ba98, 0xa66b52];
+type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role' | 'trajectory'> &
+  Partial<Pick<Rider, 'skinTone'>>;
 
 export function riderSize(id: number) {
   return 0.88 + ((id * 7) % 21) / 100;
@@ -129,7 +129,7 @@ export function buildRiders(scene: T.Object3D) {
       const style = riderStyle(id);
       const kind = role === 'takes' ? 1 : role === 'prank' ? 10 : style.shirt;
       const jacket = shirts[kind];
-      const skin = skins[(id * 5 + 3) % skins.length];
+      const skin = rider.skinTone ?? SKIN_TONES[(id * 5 + 3) % SKIN_TONES.length];
       const dress = style.cut >= 8;
       const skirt = !seated && style.cut >= 6;
       const long = style.cut % 2 === 0;

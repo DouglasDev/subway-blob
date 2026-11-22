@@ -1,6 +1,20 @@
 export const PA_FEEDBACK_SECONDS = 4.15;
 
-export const SODA_RADIUS = 0.87;
+export const SODA_EDGE = [0.94, 0.04, 0.02] as const;
+
+export function sodaRadius(age: number) {
+  const progress = Math.max(0, Math.min(1, age / 6));
+
+  return 0.68 + 0.36 * progress * progress * (3 - 2 * progress);
+}
+
+export function sodaContains(x: number, z: number, radius: number) {
+  const angle = Math.atan2(z, x);
+  const [base, ripple, flecks] = SODA_EDGE;
+  const edge = base + ripple * Math.sin(angle * 5) + flecks * Math.sin(angle * 9);
+
+  return Math.hypot(x, z) <= radius * edge;
+}
 
 export const SODA_SPEED = 0.46;
 

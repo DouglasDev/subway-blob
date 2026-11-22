@@ -48,10 +48,13 @@ export function powerDeck(random: () => number) {
   };
 }
 
+const OPENING_PROXIMITY = [1.35, 1.8, 2.27, 2.4, 2.55];
+
 export function crowdPressure(stop: number, raw: number, local: number) {
-  const late = 1 - Math.exp(-Math.max(0, stop - 4) / 12);
-  const difficulty = 0.85 + 0.25 * (1 - Math.exp(-Math.max(0, stop - 2) / 19));
+  const late = 1 - Math.exp(-Math.max(0, stop - 5) / 4);
+  const packedCarRelief = 0.02 * Math.min(1, Math.max(0, (stop - 13) / 4));
+  const difficulty = OPENING_PROXIMITY[stop] ?? 1.55 - 0.45 * (1 - Math.exp(-(stop - 5) / 9));
   const crowd = Math.max(raw, Math.min(1, local * difficulty));
 
-  return crowd * (1 - 0.31 * late);
+  return crowd * (1 - 0.5 * late - packedCarRelief);
 }
