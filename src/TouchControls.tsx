@@ -2,7 +2,7 @@ import { styled } from '@linaria/react';
 import { useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import type { Input } from './sim/ride.ts';
-import { COOL_POINTS, POWERS } from './sim/powers.ts';
+import { healPoints, POWERS } from './sim/powers.ts';
 import type { Power } from './sim/powers.ts';
 
 const directions = [
@@ -324,7 +324,8 @@ const ActionLabel = styled.span`
 export function powerSlotLabel(power: Power | null, slot: number) {
   if (!power) return `Empty power-up slot ${slot + 1}`;
 
-  const effect = power === 'cool' ? `. Reduce Squished by up to ${COOL_POINTS} points` : '';
+  const heal = healPoints(power);
+  const effect = heal ? `. Reduce Squished by up to ${heal} points` : '';
 
   return `Use ${POWERS[power].name} in slot ${slot + 1}${effect}`;
 }
@@ -399,7 +400,7 @@ export function TouchControls({ inventory, disabled, onPower, onStick }: TouchCo
               </ActionButton>
               <ActionLabel>
                 {power ? POWERS[power].name : 'Empty'}
-                {power === 'cool' && ` · −${COOL_POINTS} Squished`}
+                {healPoints(power) > 0 && ` · −${healPoints(power)} Squished`}
               </ActionLabel>
             </ActionSlot>
           );

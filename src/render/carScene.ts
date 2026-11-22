@@ -22,7 +22,11 @@ const paint = (color: number, metalness = 0, roughness = 0.72) =>
 const steel = paint(0x8d9e9b, 0.62, 0.34);
 const darkSteel = paint(0x374849, 0.4);
 const panels = paint(0xd0d8cb);
-const seat = paint(0x478d88, 0.08, 0.38);
+
+const plastic = (color: number) =>
+  new T.MeshPhysicalMaterial({ color, roughness: 0.49, clearcoat: 0.21, clearcoatRoughness: 0.37 });
+
+const seat = plastic(0x478d88);
 const windowGlass = new T.MeshStandardMaterial({
   color: 0x72998e,
   transparent: true,
@@ -30,7 +34,7 @@ const windowGlass = new T.MeshStandardMaterial({
   roughness: 0.22,
   depthWrite: false,
 });
-const crossSeat = paint(0x9b613c, 0.08, 0.42);
+const crossSeat = plastic(0x9b613c);
 const yellow = paint(0xe4b144);
 const ink = paint(0x183032);
 const lamp = new T.MeshBasicMaterial({ color: 0xf8e7bd });
@@ -395,6 +399,43 @@ export function buildTrack(scene: T.Scene) {
   );
   const ribs = Array.from({ length: 23 }, () => box(scene, ink, 0, 1.1, -3.06, 0.095, 3, 0.14));
 
+  const tunnelLamps = new T.Group();
+  const glow = new T.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      varying vec2 point;
+      void main() {
+        point = uv - 0.5;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 point;
+      void main() {
+        float wash = 1.0 - smoothstep(0.05, 0.50, length(point));
+        gl_FragColor = vec4(0.70, 0.59, 0.37, wash * 0.19);
+      }
+    `,
+  });
+  const strip = new T.MeshBasicMaterial({ color: 0xa38058 });
+  const lampSpacing = 6.45;
+  const fixtures = Array.from({ length: 21 }, () => {
+    const light = new T.Group();
+    const wash = new T.Mesh(new T.PlaneGeometry(1.25, 1.12), glow);
+
+    wash.position.set(0, 1.62, -3.071);
+    light.add(wash);
+    box(light, ink, 0, 2.03, -3.058, 0.34, 0.083, 0.12);
+    box(light, strip, 0, 2.016, -2.99, 0.21, 0.035, 0.02);
+    tunnelLamps.add(light);
+
+    return light;
+  });
+
+  tunnelLamps.name = 'Tunnel lamps';
+  scene.add(tunnelLamps);
+
   function wall(index: number, from: number, to: number) {
     walls[index].visible = to > from;
     walls[index].position.x = (to + from) / 2;
@@ -415,6 +456,13 @@ export function buildTrack(scene: T.Scene) {
     wall(0, -74, left - 14);
     wall(1, left + 14, right - 14);
     wall(2, right + 14, 74);
+
+    for (const [index, light] of fixtures.entries()) {
+      const x = (index - 10) * lampSpacing + (departing % lampSpacing);
+
+      light.position.x = x;
+      light.visible = Math.abs(x - departing) > 14.6 && (!moving || Math.abs(x - arriving) > 14.6);
+    }
 
     for (const [index, rib] of ribs.entries()) {
       const x = (index - 11) * 2.15 + (departing % 2.15);

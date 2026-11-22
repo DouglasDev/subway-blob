@@ -34,6 +34,7 @@ function useHeld() {
   const danger = ride.guestPressure > 0.35 || ride.sticky;
   const nearRiders = ride.crowd.riders.some((r) => !r.trajectory && distance(r, ride.fluid) < 1.3);
   const priorities = [
+    'recovery',
     'cool',
     'shield',
     'fluid',
@@ -46,6 +47,7 @@ function useHeld() {
   ];
 
   const defense = {
+    recovery: pressure() >= 0.52,
     cool: pressure() >= 0.33,
     shield: (danger || trapped) && pressure() >= 0.18 && ride.time >= ride.shieldUntil,
     fluid: trapped && ride.time >= ride.fluidUntil,
@@ -63,7 +65,7 @@ function useHeld() {
     if (slot === -1) continue;
     const use =
       profile === 'casual'
-        ? pressure() >= 0.58 && (power === 'cool' || trapped || danger)
+        ? pressure() >= 0.58 && (power === 'cool' || power === 'recovery' || trapped || danger)
         : (defense[power] ?? crowdReady);
 
     if (!use) continue;

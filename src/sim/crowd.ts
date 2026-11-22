@@ -21,6 +21,7 @@ type Slot = Location & { key: number; zone: number; priority: number };
 export type Rider = Location & {
   id: number;
   skinTone: number;
+  phone: boolean;
   slot: Slot;
   heading: number;
   stride: number;
@@ -35,6 +36,26 @@ export type Rider = Location & {
 
 const BOARDING = [12, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10];
 const ZONES = 5;
+const PASSAGE_START = 12;
+
+export type CrowdPassage = { from: number; to: number; z: number };
+
+const PASSAGES: CrowdPassage[] = [
+  { from: -4.24, to: -3.05, z: -0.66 },
+  { from: -4.24, to: -3.05, z: 0.66 },
+  { from: -2.8, to: -1.68, z: 0.55 },
+  { from: -0.85, to: 0.36, z: -0.64 },
+  { from: -0.85, to: 0.32, z: 0.44 },
+  { from: 1.84, to: 2.96, z: 0.62 },
+  { from: 1.85, to: 2.96, z: -0.62 },
+  { from: 3.07, to: 4.27, z: 0.66 },
+  { from: 3.07, to: 4.27, z: -0.66 },
+];
+
+function inPassage({ x, z }: Location, passage: CrowdPassage) {
+  return x >= passage.from - 0.22 && x <= passage.to + 0.22 && Math.abs(z - passage.z) < 0.49;
+}
+
 const POWER_EXITS = 2;
 const LIGHT_STOP_POWER_EXITS = 4;
 
@@ -56,19 +77,25 @@ export class Crowd {
   onboard = 0;
   boarded = 0;
   exited = 0;
+  passages: readonly CrowdPassage[] = [];
   private readonly slots: Slot[] = [];
   private serial = 0;
   private readonly random: () => number;
   private readonly passengerSkin: () => number;
   private readonly guestSkin: () => number;
+  private readonly phoneRandom: () => number;
+  private nextPhone?: boolean;
+  private readonly passageRandom: () => number;
   private readonly boardingRandom: () => number;
   private nextLightStop: number;
   private powerExitsLeft = 0;
 
   constructor(seed: number) {
     this.random = seededRandom(seed);
+    this.phoneRandom = seededRandom(Math.imul(seed ^ 0x12a4f087, 0x85ebca6b));
     this.passengerSkin = skinDeck(Math.imul(seed ^ 0xc6217ee9, 0x9e3779b1));
     this.guestSkin = skinDeck(Math.imul(seed ^ 0xa0e128b3, 0x85ebca6b));
+    this.passageRandom = seededRandom(Math.imul(seed ^ 0x447c07af, 0x9e3779b1));
     this.boardingRandom = seededRandom(Math.imul(seed ^ 0xad9f381d, 0x9e3779b1));
     this.nextLightStop = 4 + Math.floor(this.boardingRandom() * 3);
 
@@ -125,11 +152,18 @@ export class Crowd {
 
     const leaving = [...planned, ...regular, ...queued];
     const leavingIds = new Set(leaving.map(({ id }) => id));
-    const staying = this.riders.filter(({ id }) => !leavingIds.has(id)).map(({ slot }) => slot);
+    const remainingRiders = this.riders.filter(({ id }) => !leavingIds.has(id));
+
+    if (stop >= PASSAGE_START) this.clearPassages(remainingRiders);
+
+    const staying = remainingRiders.map(({ slot }) => slot);
     const wave = BOARDING[Math.min(stop, BOARDING.length - 1)];
     // Keep the original crowd ramp across the lighter boarding waves.
     const boarding = light ? planned.length + regular.length + 1 : wave + Number(stop >= 4);
-    const slots = this.assign(staying, boarding, stop >= 2);
+    const room = this.passages.length
+      ? Math.max(1, this.slots.length - 16 - staying.length)
+      : boarding;
+    const slots = this.assign(staying, Math.min(boarding, room), stop >= 2);
     const remaining = allowance - queued.length;
 
     this.powerExitsLeft = light
@@ -230,7 +264,7 @@ export class Crowd {
   }
 
   react(
-    power: Exclude<Power, 'cool' | 'shield' | 'express' | 'fluid'>,
+    power: Exclude<Power, 'cool' | 'recovery' | 'shield' | 'express' | 'fluid'>,
     from: Location,
     time: number,
     doors: boolean,
@@ -471,9 +505,13 @@ export class Crowd {
 
   private createRider(slot: Slot, position: Location, heading: number, role?: Encounter): Rider {
     const skinTone = role ? this.guestSkin() : this.passengerSkin();
+    const phone = !role && (this.nextPhone ?? this.phoneRandom() < 0.5);
+
+    if (!role) this.nextPhone = this.nextPhone === undefined ? !phone : undefined;
     const rider: Rider = {
       id: this.serial++,
       skinTone,
+      phone,
       slot,
       ...position,
       heading,
@@ -590,7 +628,7 @@ export class Crowd {
     return Math.min(1, exposure / 2.7);
   }
 
-  occupy(grid: Grid, mask: Uint8Array, stop: number) {
+  occupy(grid: Grid, mask: Uint8Array, stop: number, bodies = mask) {
     // Leave usable gaps between collision shapes when the slots fill.
     const packed = Math.min(0.72, Math.max(0, (stop - 2) / 11));
     const shoulderX = 0.16 + 0.09 * packed;
@@ -601,7 +639,7 @@ export class Crowd {
 
       if (role === 'spreader' && !trajectory && !stride && spreaderSitting(x, z)) {
         grid.block(
-          mask,
+          bodies,
           { x: x - 0.23, y: 0.47, z: z - 0.22 },
           { x: x + 0.23, y: 1.38, z: z + 0.13 },
         );
@@ -625,7 +663,7 @@ export class Crowd {
               const pz = z - localX * sin + localZ * cos;
 
               grid.block(
-                mask,
+                bodies,
                 { x: px - 0.106, y: py - 0.105, z: pz - 0.106 },
                 { x: px + 0.106, y: py + 0.105, z: pz + 0.106 },
               );
@@ -647,24 +685,97 @@ export class Crowd {
       }
 
       grid.block(
-        mask,
+        bodies,
         { x: x - shoulderX, y: 0.64, z: z - shoulderZ },
         { x: x + shoulderX, y: 1.46, z: z + shoulderZ },
       );
 
       grid.block(
-        mask,
+        bodies,
         { x: x - 0.13 - 0.1 * packed, y: 1.46, z: z - 0.12 - 0.12 * packed },
         { x: x + 0.13 + 0.1 * packed, y: HEIGHT_LIMIT, z: z + 0.12 + 0.12 * packed },
       );
 
       for (const leg of [-0.11, 0.11]) {
         grid.block(
-          mask,
+          bodies,
           { x: x - 0.11 - 0.13 * packed, y: 0, z: z + leg - 0.077 - 0.067 * packed },
           { x: x + 0.11 + 0.13 * packed, y: 0.64, z: z + leg + 0.077 + 0.067 * packed },
         );
       }
+    }
+  }
+
+  private clearPassages(staying: Rider[]) {
+    const previous = this.passages;
+    const choices = shuffle([...PASSAGES], this.passageRandom);
+    const wanted = this.passageRandom() < 0.5 ? 2 : 3;
+    let selected: CrowdPassage[] = [];
+
+    const capacity = (passages: readonly CrowdPassage[]) =>
+      this.slots.filter((slot) => !passages.some((passage) => inPassage(slot, passage))).length;
+
+    const overlaps = (a: CrowdPassage, b: CrowdPassage) =>
+      a.from < b.to + 0.18 && a.to > b.from - 0.18;
+
+    for (const passage of choices) {
+      if (selected.length === wanted) break;
+      if (selected.some((other) => overlaps(passage, other))) continue;
+
+      const reserved = [...selected, passage];
+
+      if (capacity(reserved) < staying.length + 1) continue;
+      if (selected.length === wanted - 1 && reserved.every((item) => previous.includes(item)))
+        continue;
+
+      selected.push(passage);
+    }
+
+    if (
+      selected.length < 2 ||
+      (selected.length === previous.length && selected.every((item) => previous.includes(item)))
+    ) {
+      const alternatives = choices.flatMap((first, index) =>
+        choices
+          .slice(index + 1)
+          .filter(
+            (second) =>
+              !overlaps(first, second) &&
+              !(previous.length === 2 && previous.includes(first) && previous.includes(second)),
+          )
+          .map((second) => [first, second]),
+      );
+      const alternative = alternatives.find((pair) => capacity(pair) >= staying.length + 1);
+
+      if (alternative) selected = alternative;
+    }
+
+    this.passages = selected;
+
+    const keep = (slot: Slot) => !selected.some((passage) => inPassage(slot, passage));
+
+    const moving = staying.filter((rider) => !rider.role && !keep(rider.slot));
+    const occupied = new Set(
+      staying.filter((rider) => !moving.includes(rider)).map((rider) => rider.slot.key),
+    );
+    const available = this.slots.filter((slot) => keep(slot) && !occupied.has(slot.key));
+
+    for (const rider of moving) {
+      let closest = -1;
+      let distance = Infinity;
+
+      for (const [index, slot] of available.entries()) {
+        const gap = Math.hypot(slot.x - rider.x, slot.z - rider.z);
+
+        if (gap < distance) {
+          closest = index;
+          distance = gap;
+        }
+      }
+
+      if (closest === -1) break;
+      rider.slot = available.splice(closest, 1)[0];
+      if (rider.prop) rider.prop.pushed = false;
     }
   }
 
@@ -674,7 +785,10 @@ export class Crowd {
 
     for (const { zone } of staying) byZone[zone]++;
 
-    const available = this.slots.filter(({ key }) => !occupied.has(key));
+    const available = this.slots.filter(
+      (slot) =>
+        !occupied.has(slot.key) && !this.passages.some((passage) => inPassage(slot, passage)),
+    );
 
     if (fillAisle) {
       const rank = (slot: Slot) => slot.priority + Math.abs(slot.z) * 1.2;

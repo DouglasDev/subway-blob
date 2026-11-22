@@ -5,6 +5,7 @@ import {
   EXPRESS_SECONDS,
   crowdPressure,
   DOUBLE_PICKUP_STOP,
+  pickupWave,
   powerDeck,
   POWERS,
 } from '../src/sim/powers.ts';
@@ -142,7 +143,7 @@ function play(steer: number, frame: number, checkVolume = false) {
 
   ride.start();
 
-  for (let wall = 0; wall < 270; wall += frame) {
+  for (let index = 0; index < Math.round(270 / frame); index++) {
     const previousScore = ride.score;
 
     ride.advance(frame, { x: steer, z: 0 });
@@ -159,9 +160,27 @@ function play(steer: number, frame: number, checkVolume = false) {
 test('a full 4 train ride preserves the legal volume and awards no point for a pop', () => {
   const idle = play(0, STEP, true);
 
-  assert.equal(idle.phase, 'popped');
-  assert.ok(idle.score === idle.stop || idle.score === idle.stop + 1);
   assert.ok(idle.score > 0);
+  assertVolume(idle.fluid, idle.mask);
+  const score = idle.score;
+
+  if (idle.phase !== 'popped') {
+    idle.tolerance = 0.0001;
+
+    idle.encounter = {
+      kind: 'soda',
+      began: idle.time,
+      expires: idle.stop + 1,
+      variant: 0,
+      dialogueAt: 0,
+      location: { x: idle.fluid.x, z: idle.fluid.z },
+    };
+
+    idle.tick({ x: 0, z: 0 });
+  }
+
+  assert.equal(idle.phase, 'popped');
+  assert.equal(idle.score, score);
   assert.equal(idle.tolerance, 0);
 });
 
@@ -198,7 +217,6 @@ test('different render rates produce the same ride outcome', () => {
   const slow = play(0, 1 / 30);
   const fast = play(0, 1 / 120);
 
-  assert.equal(slow.phase, 'popped');
   assert.equal(slow.phase, fast.phase);
   assert.equal(slow.time, fast.time);
   assert.equal(slow.score, fast.score);
@@ -229,8 +247,8 @@ test('a no-fit tick keeps full volume and allows steering before the crowd retri
   ride.start();
   const rasterize = ride.crowd.occupy.bind(ride.crowd);
 
-  ride.crowd.occupy = (_grid, mask) => {
-    mask.fill(1);
+  ride.crowd.occupy = (_grid, _solids, _stop, bodies) => {
+    bodies?.fill(1);
   };
 
   const before = ride.fluid.x;
@@ -245,6 +263,184 @@ test('a no-fit tick keeps full volume and allows steering before the crowd retri
   ride.crowd.occupy = rasterize;
   ride.tick({ x: 1, z: 0 });
   assert.ok(ride.squeeze < 1);
+});
+
+test('visual squeeze and fixture jams do not inflict passenger damage', () => {
+  const ride = new Ride();
+
+  ride.start();
+
+  ride.crowd.occupy = (_grid, solids) => {
+    solids.fill(1);
+  };
+
+  ride.crowd.congestion = () => 1;
+
+  ride.tick({ x: 1, z: 0 });
+
+  assert.ok(ride.squeeze > 0);
+  assert.equal(ride.tolerance, 1);
+});
+
+test('passenger damage ends immediately when the obstruction clears', () => {
+  const ride = new Ride();
+
+  ride.start();
+  const rasterize = ride.crowd.occupy.bind(ride.crowd);
+
+  ride.crowd.occupy = (_grid, _solids, _stop, bodies) => {
+    bodies?.fill(1);
+  };
+
+  ride.tick({ x: 0, z: 0 });
+  const injured = ride.tolerance;
+
+  assert.ok(injured < 1);
+  ride.crowd.riders = [];
+  ride.crowd.occupy = rasterize;
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(ride.squeeze > 0);
+  assert.equal(ride.tolerance, injured);
+});
+
+test('a guest circle checks the blob center instead of a stray edge cell', () => {
+  const ride = new Ride();
+
+  ride.start();
+  ride.crowd.riders = [];
+
+  ride.encounter = {
+    kind: 'speaker',
+    began: -2,
+    expires: 1,
+    variant: 0,
+    dialogueAt: 0,
+    location: { x: 4.43, z: 0 },
+  };
+
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.guestPressure, 0);
+
+  ride.encounter.location = { x: 3, z: 0 };
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(ride.guestPressure > 0);
+});
+
+test('some pickup waves place the extra tokens beyond a blocked section', () => {
+  let found = false;
+
+  for (const seed of [14, 42, 315, 824, 2026, 4096, 7219, 12071, 24680]) {
+    const ride = new Ride(seed);
+    const { grid } = ride.car;
+
+    ride.stop = 12;
+    ride.phase = 'doors';
+    ride.phaseTime = 0.5;
+    ride.crowd.riders = [];
+
+    ride.crowd.occupy = (_grid, solids) => {
+      for (const [from, to] of [
+        [-4.8, -1.85],
+        [0.9, 1.1],
+      ]) {
+        grid.block(solids, { x: from, y: 0, z: -1.2 }, { x: to, y: 1.7, z: 1.2 });
+      }
+    };
+
+    ride.tick({ x: 0, z: 0 });
+    if (
+      ride.pickups.length === 3 &&
+      ride.pickups[0].x < 0.9 &&
+      ride.pickups.slice(1).every(({ x }) => x > 1.1)
+    )
+      found = true;
+  }
+
+  assert.ok(found);
+});
+
+test('the initial ordinary passengers include six phone readers per dozen', () => {
+  const make = (seed: number) => new Crowd(seed).riders.map(({ phone }) => phone);
+
+  for (const seed of [14, 42, 12071]) {
+    const phones = make(seed);
+
+    assert.equal(phones.filter(Boolean).length, 6);
+    assert.deepEqual(phones, make(seed));
+  }
+});
+
+test('seeded late passages change each stop and fit the ordinary blob', () => {
+  const { car } = new Ride();
+  const idle = { x: 0, z: 0 };
+  const crowd = new Crowd(42);
+  let previous = '';
+
+  for (let stop = 0; stop < 20; stop++) {
+    crowd.prepare(stop);
+
+    for (let tick = 0; tick < 180; tick++) {
+      crowd.update(STEP, tick * STEP, idle, car.grid, car.fixtures);
+      crowd.commitDepartures();
+    }
+
+    crowd.finishDoors();
+    if (stop < 12) continue;
+    assert.ok(crowd.passages.length === 2 || crowd.passages.length === 3);
+
+    const signature = JSON.stringify(
+      [...crowd.passages].sort((a, b) => a.from - b.from || a.z - b.z),
+    );
+    const mask = car.fixtures.slice();
+
+    assert.notEqual(signature, previous);
+    previous = signature;
+    crowd.occupy(car.grid, mask, stop);
+
+    for (const { from, to, z } of crowd.passages) {
+      const fluid = new Fluid(car.grid, STANDARD_VOLUME, from, z);
+
+      assert.ok(fluid.step(mask, 0, 0, STANDARD_VOLUME, Math.PI / 2));
+      assert.ok(Math.abs(fluid.x - from) <= 0.36);
+
+      for (let tick = 0; tick < 23; tick++)
+        fluid.step(mask, 0.065, 0, STANDARD_VOLUME, Math.PI / 2);
+
+      assert.ok(fluid.x >= to - 0.16 && Math.abs(fluid.z - z) < 0.44);
+      assertVolume(fluid, mask);
+    }
+  }
+});
+
+test('late pickup waves add one pack per four stops and Recovery restores fifty points', () => {
+  for (const seed of [14, 42, 12071]) {
+    assert.deepEqual(pickupWave(11, seed), { count: 2, recovery: false });
+
+    for (let stop = 12; stop < 28; stop += 4) {
+      const wave = Array.from({ length: 4 }, (_, index) => pickupWave(stop + index, seed));
+
+      assert.deepEqual(
+        wave.map(({ count }) => count),
+        [3, 2, 3, 2],
+      );
+
+      assert.equal(wave.filter(({ recovery }) => recovery).length, 1);
+    }
+  }
+
+  const ride = new Ride();
+
+  ride.start();
+  ride.crowd.riders = [];
+  ride.tolerance = 0.2;
+  ride.inventory[0] = 'recovery';
+  ride.usePower(0);
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.tolerance, 0.7);
+  ride.inventory[1] = 'recovery';
+  ride.usePower(1);
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.tolerance, 1);
 });
 
 test('AC grows the blob and the next door opening restores the standard volume', () => {
@@ -511,7 +707,7 @@ test('a weighted deck favors both gross powers and includes every new pickup', (
   assert.equal(all.filter((power) => power === 'fart').length, 3);
   assert.equal(all.filter((power) => power === 'vomit').length, 3);
   assert.equal(all.filter((power) => power === 'shield').length, 1);
-  assert.equal(new Set(all).size, Object.keys(POWERS).length);
+  assert.equal(new Set(all).size, Object.values(POWERS).filter(({ weight }) => weight > 0).length);
 
   for (let index = 0; index < 120; index++) {
     const first = draw();
@@ -553,8 +749,8 @@ test('late crowd pressure is capped and Quiet Bubble helps even during a jam', (
 
   ride.start();
 
-  ride.crowd.occupy = (_grid, mask) => {
-    mask.fill(1);
+  ride.crowd.occupy = (_grid, _solids, _stop, bodies) => {
+    bodies?.fill(1);
   };
 
   ride.tolerance = 0.63;

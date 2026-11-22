@@ -73,6 +73,11 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
     { at: 0, length: 0.41, pitch: 680, end: 1046 },
     { at: 0.14, length: 0.46, pitch: 920, end: 1560 },
   ],
+  recovery: [
+    { at: 0, length: 0.24, pitch: 523, end: 659 },
+    { at: 0.1, length: 0.34, pitch: 784, end: 1046 },
+    { at: 0.24, length: 0.4, pitch: 1046, end: 1568 },
+  ],
   shield: [
     { at: 0, length: 0.4, pitch: 280, end: 505 },
     { at: 0.13, length: 0.6, pitch: 420, end: 654 },

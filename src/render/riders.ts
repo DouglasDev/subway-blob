@@ -6,7 +6,7 @@ import { garment, riderStyle, shirts } from './wardrobe';
 import { buildSneezeSpray } from './sneezeSpray';
 
 type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role' | 'trajectory'> &
-  Partial<Pick<Rider, 'skinTone'>>;
+  Partial<Pick<Rider, 'skinTone' | 'phone'>>;
 
 export function riderSize(id: number) {
   return 0.88 + ((id * 7) % 21) / 100;
@@ -43,12 +43,23 @@ export function buildRiders(scene: T.Object3D) {
   const shoes = part(scene, box, undefined, 128 * 4);
   const hems = part(scene, new T.CylinderGeometry(0.34, 0.56, 1, 10));
   const bags = part(scene, box);
-  const meshes = [head, hair, arms, legs, seatedLegs, shoes, hems, bags, ...torso];
+  const phones = part(scene, box);
+  const screens = new T.InstancedMesh(box, new T.MeshBasicMaterial(), 128);
+
+  phones.name = 'Passenger phones';
+  screens.name = 'Passenger phone screens';
+  screens.count = 0;
+  screens.frustumCulled = false;
+  screens.instanceMatrix.setUsage(T.DynamicDrawUsage);
+  scene.add(screens);
+  const meshes = [head, hair, arms, legs, seatedLegs, shoes, hems, bags, phones, screens, ...torso];
   const person = new T.Object3D();
   const marker = new T.Object3D();
   const joint = new T.Object3D();
   const jointMatrix = new T.Matrix4();
   const upperMatrix = new T.Matrix4();
+  const headMatrix = new T.Matrix4();
+  const neckOffset = new T.Matrix4().makeTranslation(0, -1.38, 0);
   const hipOffset = new T.Matrix4().makeTranslation(0, -0.84, 0);
   const mouth = new T.Vector3();
   const sneezeSpray = buildSneezeSpray(scene);
@@ -117,6 +128,7 @@ export function buildRiders(scene: T.Object3D) {
   ) => {
     const counts = new Uint16Array(torso.length);
     let hairCount = 0;
+    let phoneCount = 0;
     let legCount = 0;
     let seatedLegCount = 0;
     let hemCount = 0;
@@ -124,6 +136,7 @@ export function buildRiders(scene: T.Object3D) {
 
     for (const [index, rider] of riders.entries()) {
       const { id, x, z, stride, role } = rider;
+      const looking = !!rider.phone && !stride && !role && !rider.trajectory;
       const seated = role === 'spreader' && !rider.trajectory && !stride && spreaderSitting(x, z);
       const size = seated ? 1 : riderSize(id);
       const style = riderStyle(id);
@@ -215,9 +228,19 @@ export function buildRiders(scene: T.Object3D) {
       }
 
       stamp(torso[kind], counts[kind]++, 0xffffff, 0, 1.08, 0, 0.36, 0.56, 0.23, 0, upper);
-      stamp(head, index, skin, 0, 1.52, 0.014, 0.127, 0.167, 0.126, 0, upper);
+      let face = upper;
+
+      if (looking) {
+        hinge(0, 1.38, 0, 0.36, upper);
+        face = headMatrix.copy(jointMatrix).multiply(neckOffset);
+        hinge(0.09, 1.13, 0.405, 0.37, upper);
+        stamp(phones, phoneCount, 0x1b2029, 0, 0, 0, 0.102, 0.17, 0.033, 0, jointMatrix);
+        stamp(screens, phoneCount++, 0x8caeba, 0, 0, -0.018, 0.08, 0.144, 0.006, 0, jointMatrix);
+      }
+
+      stamp(head, index, skin, 0, 1.52, 0.014, 0.127, 0.167, 0.126, 0, face);
       for (const [x, y, z, sx, sy, sz] of style.hair)
-        stamp(hair, hairCount++, style.dye, x, y, z, sx, sy, sz, 0, upper);
+        stamp(hair, hairCount++, style.dye, x, y, z, sx, sy, sz, 0, face);
 
       stamp(bags, index, 0x354348, 0, 1.05, -0.16, id % 3 === 0 ? 0.25 : 0, 0.33, 0.12, 0, upper);
 
@@ -282,7 +305,9 @@ export function buildRiders(scene: T.Object3D) {
           sign * 0.202,
           1.315,
           0.006,
-          -angle * 0.8 - pushing * 1.4 - (role === 'musician' ? 1.04 : 0),
+          -angle * 0.8 -
+            pushing * 1.4 -
+            (role === 'musician' ? 1.04 : looking ? (sign > 0 ? 1.06 : 0.77) : 0),
           upper,
         );
 
@@ -346,6 +371,7 @@ export function buildRiders(scene: T.Object3D) {
     hems.count = hemCount;
     legs.count = legCount;
     seatedLegs.count = seatedLegCount;
+    phones.count = screens.count = phoneCount;
 
     for (const [kind, mesh] of torso.entries()) mesh.count = counts[kind];
 

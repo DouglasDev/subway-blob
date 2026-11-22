@@ -32,8 +32,9 @@ import {
   OMNY_FLIGHT,
   OMNY_SECONDS,
   COOL_POINTS,
+  RECOVERY_POINTS,
+  pickupWave,
   crowdPressure,
-  DOUBLE_PICKUP_STOP,
   EXPRESS_SECONDS,
   powerDeck,
   SUPER_FLUID_SECONDS,
@@ -122,6 +123,9 @@ export class Ride {
   private nextMurmur = 5;
   rhinoImpactAt = -Infinity;
   private readonly ambience: () => number;
+  private readonly riderMask = new Uint8Array(this.car.grid.size);
+  private readonly solidMask = this.car.fixtures.slice();
+  private riderSqueeze = 0;
   private rawSqueeze = 0;
   private safeTime = 0;
   private readonly random: () => number;
@@ -243,17 +247,7 @@ export class Ride {
     const danger = this.guestDanger;
 
     if (danger && this.time >= this.shieldUntil) {
-      const { centers } = this.car.grid;
-      let closest = Infinity;
-
-      for (const id of this.fluid.cells) {
-        const offset = id * 3;
-        const distance = (centers[offset] - danger.x) ** 2 + (centers[offset + 2] - danger.z) ** 2;
-
-        closest = Math.min(closest, distance);
-      }
-
-      const distance = Math.sqrt(closest);
+      const distance = Math.hypot(this.fluid.x - danger.x, this.fluid.z - danger.z);
 
       this.guestPressure =
         encounter.kind === 'speaker'
@@ -379,11 +373,10 @@ export class Ride {
     this.updateGuest();
 
     this.sticky = !!soda && sodaContains(this.fluid.x - soda.x, this.fluid.z - soda.z, soda.radius);
-    const strain = quiet
-      ? Math.min(this.squeeze, load)
-      : this.rawSqueeze === 1
-        ? pressure
-        : this.squeeze;
+    const compression = this.riderSqueeze > 0 ? crowdPressure(this.stop, this.riderSqueeze, 0) : 0;
+    const densityFactor =
+      this.stop < 13 ? 1.27 : 1 + 0.7 * Math.min(1, Math.max(0, this.stop - 17) / 7);
+    const strain = Math.min(1, compression * densityFactor) * (quiet ? 0.2 : 1);
     const smoker = !quiet && encounter?.kind === 'smoker';
     const riderDamage = encounter && hasGuest(encounter.kind) ? this.guestDamageMultiplier : 1;
 
@@ -479,40 +472,63 @@ export class Ride {
 
     const superFluid = this.time < this.fluidUntil;
 
-    this.proposedMask.set(fixtures);
-    this.crowd.occupy(grid, this.proposedMask, this.stop);
+    const x = this.fluid.x + dx;
+    const z = this.fluid.z + dz;
+    const currentVolume = this.fluid.volume;
+
+    this.rasterizeCrowd(fixtures);
+    this.riderSqueeze = 0;
 
     if (this.fluid.step(this.proposedMask, dx, dz, target, this.facing, superFluid)) {
       this.mask.set(this.proposedMask);
       this.rawSqueeze = this.fluid.pressure;
     } else {
-      if (
-        target === this.fluid.volume ||
-        !this.fluid.step(this.proposedMask, dx, dz, this.fluid.volume, this.facing, superFluid)
-      ) {
+      const fitsAtCurrentVolume =
+        target !== currentVolume &&
+        this.fluid.step(this.proposedMask, dx, dz, currentVolume, this.facing, superFluid);
+
+      if (!fitsAtCurrentVolume) {
+        const blocksBody = this.fluid.cells.some((id) => {
+          if (this.riderMask[id] && !this.solidMask[id]) return true;
+
+          for (let face = 0; face < 6; face++) {
+            const next = grid.neighbors[id * 6 + face];
+
+            if (next >= 0 && this.riderMask[next] && !this.solidMask[next]) return true;
+          }
+
+          return false;
+        });
+
+        if (
+          blocksBody &&
+          this.fluid.step(this.solidMask, dx, dz, currentVolume, this.facing, superFluid, true)
+        )
+          this.riderSqueeze = 1;
+
         this.crowd.yieldNear(saved, this.fluid);
-        this.proposedMask.set(fixtures);
-        this.crowd.occupy(grid, this.proposedMask, this.stop);
+        this.rasterizeCrowd(fixtures);
 
         if (
           !this.fluid.step(
             this.proposedMask,
             dx,
             dz,
-            Math.min(target, this.fluid.volume),
+            Math.min(target, currentVolume),
             this.facing,
             superFluid,
           )
         ) {
-          // The last mask and poses are valid even when a dense wave has to wait.
+          // Keep the previous legal body when the crowd or the fixtures block every placement.
           this.crowd.riders = saved;
+          this.rasterizeCrowd(fixtures);
           this.proposedMask.set(this.mask);
 
           this.fluid.step(
             this.mask,
             dx,
             dz,
-            Math.min(target, this.fluid.volume),
+            Math.min(target, currentVolume),
             this.facing,
             superFluid,
           );
@@ -521,6 +537,20 @@ export class Ride {
 
       this.mask.set(this.proposedMask);
       this.rawSqueeze = 1;
+    }
+
+    if (this.riderSqueeze < 1) {
+      const displaced = this.fluid.riderCompression(
+        this.riderMask,
+        this.solidMask,
+        x,
+        z,
+        this.facing,
+        superFluid,
+      );
+      const pressureGain = this.stop < 5 ? 15 : this.stop < 13 ? 10 : 6;
+
+      this.riderSqueeze = Math.min(1, displaced * pressureGain);
     }
 
     if (
@@ -535,6 +565,17 @@ export class Ride {
     }
 
     this.crowd.commitDepartures();
+  }
+
+  private rasterizeCrowd(fixtures: Uint8Array) {
+    this.solidMask.set(fixtures);
+    this.riderMask.fill(0);
+    this.crowd.occupy(this.car.grid, this.solidMask, this.stop, this.riderMask);
+    this.proposedMask.set(this.solidMask);
+
+    for (let id = 0; id < this.riderMask.length; id++) {
+      if (this.riderMask[id]) this.proposedMask[id] = 1;
+    }
   }
 
   private activatePowers() {
@@ -555,7 +596,11 @@ export class Ride {
 
       this.cues.push(power);
 
-      if (power === 'cool') this.tolerance = Math.min(1, this.tolerance + COOL_POINTS / 100);
+      if (power === 'cool' || power === 'recovery')
+        this.tolerance = Math.min(
+          1,
+          this.tolerance + (power === 'cool' ? COOL_POINTS : RECOVERY_POINTS) / 100,
+        );
       else if (power === 'shield') this.shieldUntil = this.time + QUIET_SECONDS;
       else if (power === 'fluid') this.fluidUntil = this.time + SUPER_FLUID_SECONDS;
       else if (power === 'express') this.expressUntil = this.time + EXPRESS_SECONDS;
@@ -588,7 +633,9 @@ export class Ride {
 
   private updatePickup() {
     if (this.phase === 'doors' && this.door === 1 && !this.spawned) {
-      this.pickups = this.placePickups(this.stop >= DOUBLE_PICKUP_STOP ? 2 : 1);
+      const wave = pickupWave(this.stop, this.seed);
+
+      this.pickups = this.placePickups(wave.count, wave.recovery);
       this.spawned = this.pickups.length > 0;
     }
 
@@ -614,10 +661,12 @@ export class Ride {
     });
   }
 
-  private placePickups(count: number): Pickup[] {
+  private placePickups(count: number, recovery: boolean): Pickup[] {
     const { grid } = this.car;
     const seen = new Uint8Array(grid.size);
     const queue = [...this.fluid.cells];
+    const scatter =
+      count > 1 && seededRandom(Math.imul(this.seed ^ this.stop ^ 0x345a9e51, 0x85ebca6b))() < 0.48;
     const zones = new Map<number, ReturnType<typeof grid.point>[]>();
     const columns = new Set<number>();
     const reach = this.stop === 0 ? 2.35 : 3.45;
@@ -651,16 +700,35 @@ export class Ride {
       }
     }
 
+    const distant = new Map<number, ReturnType<typeof grid.point>[]>();
+
+    if (scatter) {
+      for (let ix = 1; ix < grid.length - 1; ix += 2) {
+        for (let iz = 3; iz < grid.width - 3; iz += 2) {
+          const id = grid.index(ix, 4, iz);
+
+          if (this.mask[id] || seen[id]) continue;
+          const point = grid.point(id);
+          const zone = Math.floor((point.x + 4.8) / 1.6) * 2 + Number(point.z >= 0);
+
+          if (!distant.has(zone)) distant.set(zone, []);
+          distant.get(zone)!.push(point);
+        }
+      }
+    }
+
     const pickups: Pickup[] = [];
     const selectedZones: number[] = [];
 
     for (let index = 0; index < count; index++) {
       const first = pickups[0];
-      const candidates = [...zones]
+      const isRecovery = recovery && index === count - 1;
+      const pool = index > 0 && distant.size ? distant : zones;
+      const candidates = [...pool]
         .map(([zone, spots]) => ({
           zone,
-          spots: spots.filter(
-            (point) => !first || Math.hypot(point.x - first.x, point.z - first.z) >= 0.82,
+          spots: spots.filter((point) =>
+            pickups.every(({ x, z }) => Math.hypot(point.x - x, point.z - z) >= 0.82),
           ),
         }))
         .filter(({ spots }) => spots.length > 0);
@@ -674,9 +742,11 @@ export class Ride {
         const spot = choice.spots[Math.floor(this.random() * choice.spots.length)];
 
         selectedZones.push(choice.zone);
-        pickups.push({ ...spot, power: this.pickPower(first?.power) });
+        pickups.push({ ...spot, power: isRecovery ? 'recovery' : this.pickPower(first?.power) });
         continue;
       }
+
+      if (index >= 2) break;
 
       const fallback = this.fluid.cells
         .map((id) => grid.point(id))
@@ -690,6 +760,9 @@ export class Ride {
 
       pickups.push({ ...fallback, power: this.pickPower(first?.power) });
     }
+
+    if (recovery && pickups.length && !pickups.some(({ power }) => power === 'recovery'))
+      pickups[pickups.length - 1].power = 'recovery';
 
     this.lastPickupZones = [...selectedZones, ...this.lastPickupZones].slice(0, 3);
 

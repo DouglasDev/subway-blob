@@ -15,7 +15,7 @@ function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
 
 export function buildRideObjects(scene: T.Object3D) {
   const makeCard = omnyCardFactory();
-  const tokens = Array.from({ length: 2 }, () => {
+  const tokens = Array.from({ length: 3 }, () => {
     const token = new T.Group();
     const jewel = part(token, new T.IcosahedronGeometry(0.13, 0), 0xffd061);
     const halo = part(token, new T.TorusGeometry(0.16, 0.016, 6, 16), 0xfffac0);
@@ -23,13 +23,29 @@ export function buildRideObjects(scene: T.Object3D) {
 
     card.scale.setScalar(0.78);
     token.add(card);
+    const recovery = new T.Group();
+    const casing = part(recovery, new T.CylinderGeometry(0.085, 0.088, 0.23, 12), 0xff9dc8);
+    const lid = part(recovery, new T.CylinderGeometry(0.084, 0.084, 0.015, 12), 0xe2e0e2);
+
+    lid.position.y = 0.116;
+
+    casing.rotation.z = 0.035;
+
+    for (const side of [-1, 1]) {
+      const upright = part(recovery, new T.BoxGeometry(0.045, 0.145, 0.012), 0xfffff1);
+      const cross = part(recovery, new T.BoxGeometry(0.145, 0.045, 0.012), 0xfffff1);
+
+      upright.position.z = cross.position.z = side * 0.086;
+    }
+
+    token.add(recovery);
     const beacon = part(token, new T.CircleGeometry(0.24, 16), 0xd79849);
 
     beacon.rotation.x = -Math.PI / 2;
     beacon.position.y = 0.014;
     scene.add(token);
 
-    return { token, jewel, halo, beacon, card };
+    return { token, jewel, halo, beacon, card, recovery };
   });
 
   const thrownCard = makeCard();
@@ -113,7 +129,7 @@ export function buildRideObjects(scene: T.Object3D) {
       );
     }
 
-    for (const [index, { token, jewel, halo, beacon, card }] of tokens.entries()) {
+    for (const [index, { token, jewel, halo, beacon, card, recovery }] of tokens.entries()) {
       const pickup = pickups[index];
 
       token.visible = !!pickup;
@@ -123,8 +139,11 @@ export function buildRideObjects(scene: T.Object3D) {
       token.position.set(pickup.x, 0, pickup.z);
       jewel.position.y = pickup.y + Math.sin(time * 6 + index) * 0.055;
       jewel.rotation.set(time, index + time * 2.4, 0.2);
-      jewel.visible = pickup.power !== 'omny';
-      card.visible = !jewel.visible;
+      card.visible = pickup.power === 'omny';
+      recovery.visible = pickup.power === 'recovery';
+      jewel.visible = !card.visible && !recovery.visible;
+      recovery.position.copy(jewel.position);
+      recovery.rotation.y = time * 1.7;
       card.position.copy(jewel.position);
       card.rotation.set(-0.17, time * 2.4, 0.19);
       const color = POWERS[pickup.power].color;

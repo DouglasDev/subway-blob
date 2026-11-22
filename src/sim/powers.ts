@@ -1,4 +1,4 @@
-import { shuffle } from './encounters.ts';
+import { seededRandom, shuffle } from './encounters.ts';
 
 const catalog = {
   crazy: { name: 'Crazy Mode', color: 0xd794ff, weight: 1 },
@@ -7,6 +7,7 @@ const catalog = {
   annoy: { name: 'Annoying Alarm', color: 0xff8a55, weight: 2 },
   omny: { name: 'OMNY Card Toss', color: 0x83ddfa, weight: 2 },
   cool: { name: 'Cool Pack', color: 0x8de8ff, weight: 2 },
+  recovery: { name: 'Prebiotic Soda', color: 0xffb9d8, weight: 0 },
   shield: { name: 'Quiet Bubble', color: 0x70a8ff, weight: 1 },
   express: { name: 'Speed Boost', color: 0xffdc73, weight: 2 },
   fluid: { name: 'Super Fluid', color: 0x7affdf, weight: 2 },
@@ -18,7 +19,26 @@ export const POWERS = catalog;
 
 export const DOUBLE_PICKUP_STOP = 7;
 
+export const LATE_PICKUP_STOP = 12;
+
 export const COOL_POINTS = 25;
+
+export const RECOVERY_POINTS = 50;
+
+export function healPoints(power: Power | null) {
+  return power === 'cool' ? COOL_POINTS : power === 'recovery' ? RECOVERY_POINTS : 0;
+}
+
+export function pickupWave(stop: number, seed: number) {
+  if (stop < DOUBLE_PICKUP_STOP) return { count: 1, recovery: false };
+  const late = stop - LATE_PICKUP_STOP;
+
+  if (late < 0 || late % 2 !== 0) return { count: 2, recovery: false };
+  const block = Math.floor(late / 4);
+  const random = seededRandom(Math.imul(seed ^ block ^ 0x538cb15f, 0x9e3779b1));
+
+  return { count: 3, recovery: late % 4 === (random() < 0.5 ? 0 : 2) };
+}
 
 export const EXPRESS_SECONDS = 10;
 

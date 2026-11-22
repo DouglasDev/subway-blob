@@ -117,7 +117,8 @@ export function buildHazards(car: T.Object3D) {
         float lip = (1.0 - smoothstep(0.009, 0.05, inset)) * (0.58 + 0.42 * cos(angle + 0.9));
         float sheen = smoothstep(0.78, 0.98, sin(point.x * 19.0 + sin(point.y * 31.0) * 0.5)) * 0.12;
         vec3 color = vec3(0.47, 0.22, 0.105) + (lip * 0.42 + sheen) * vec3(1.0, 0.68, 0.38);
-        gl_FragColor = vec4(color, 1.0);
+        float redEdge = 1.0 - smoothstep(0.012, 0.048, inset);
+        gl_FragColor = vec4(mix(color, vec3(0.94, 0.10, 0.075), redEdge * 0.92), 1.0);
       }
     `,
     }),

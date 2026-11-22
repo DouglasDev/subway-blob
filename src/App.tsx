@@ -3,7 +3,7 @@ import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS, stationIndex } from './sim/route.ts';
 import { ENCOUNTERS } from './sim/encounters.ts';
-import { COOL_POINTS, POWERS } from './sim/powers.ts';
+import { healPoints, POWERS } from './sim/powers.ts';
 import { ACROBAT_MOVES, MUSICIAN_SONGS, PRANKS } from './sim/guestContent.ts';
 import { RideAudio } from './audio';
 import { MovementPad, powerSlotLabel, TouchControls } from './TouchControls';
@@ -598,7 +598,7 @@ export function App() {
                   onClick={() => usePower(slot === 0 ? 0 : 1)}
                 >
                   <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
-                  {power === 'cool' && ` · −${COOL_POINTS} Squished`}
+                  {healPoints(power) > 0 && ` · −${healPoints(power)} Squished`}
                 </InventorySlot>
               );
             })}

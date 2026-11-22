@@ -59,6 +59,7 @@ export class Fluid {
     targetVolume = this.volume,
     facing = 0,
     superFluid = false,
+    probe = false,
   ) {
     const previous = this.cells;
     const { grid, queue, reach, ranks, visited } = this;
@@ -124,6 +125,8 @@ export class Fluid {
     candidates.sort((a, b) => ranks[a] - ranks[b] || a - b);
     const chosen = this.findPlacement(candidates, targetVolume);
 
+    if (probe) return !!chosen;
+
     this.pressure = (1 - Math.min(comfortable / targetVolume, 1)) * (superFluid ? 0.72 : 1);
 
     if (!chosen) return false;
@@ -144,6 +147,57 @@ export class Fluid {
     this.z = z * 0.56 + (centerZ / this.volume) * 0.44;
 
     return true;
+  }
+
+  riderCompression(
+    riders: Uint8Array,
+    solids: Uint8Array,
+    x: number,
+    z: number,
+    facing: number,
+    superFluid: boolean,
+  ) {
+    const { grid } = this;
+    const touches = this.cells.some((id) => {
+      for (let face = 0; face < 6; face++) {
+        const next = grid.neighbors[id * 6 + face];
+
+        if (next >= 0 && riders[next] && !solids[next]) return true;
+      }
+
+      return false;
+    });
+
+    if (!touches) return 0;
+
+    const cos = Math.cos(facing);
+    const sin = Math.sin(facing);
+    const width = superFluid ? 0.62 : 1;
+    const cell = grid.cell;
+    const minX = Math.max(0, Math.floor((x - 0.7) / cell + grid.length / 2));
+    const maxX = Math.min(grid.length, Math.ceil((x + 0.7) / cell + grid.length / 2));
+    const minZ = Math.max(0, Math.floor((z - 0.7) / cell + grid.width / 2));
+    const maxZ = Math.min(grid.width, Math.ceil((z + 0.7) / cell + grid.width / 2));
+    let lost = 0;
+
+    for (let ix = minX; ix < maxX; ix++) {
+      const dx = (ix + 0.5 - grid.length / 2) * cell - x;
+
+      for (let iz = minZ; iz < maxZ; iz++) {
+        const dz = (iz + 0.5 - grid.width / 2) * cell - z;
+        const side = (dx * cos - dz * sin) / width;
+        const forward = (dx * sin + dz * cos) * width;
+
+        for (let iy = 0; iy < grid.height; iy++) {
+          const id = grid.index(ix, iy, iz);
+
+          if (riders[id] && !solids[id] && bodyDistance(side, (iy + 0.5) * cell, forward) <= 0.035)
+            lost++;
+        }
+      }
+    }
+
+    return Math.min(1, lost / this.volume) * (superFluid ? 0.72 : 1);
   }
 
   private findPlacement(candidates: number[], volume: number) {
