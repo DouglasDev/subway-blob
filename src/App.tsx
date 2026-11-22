@@ -214,9 +214,16 @@ export function App() {
       arcade.current = controls;
 
       unsubscribe = controls.on('press', ({ player, button }) => {
-        if (player === 1 && button === 'A') actions.current.add('a');
-        if (player === 1 && button === 'B') actions.current.add('b');
-        if (button === 'ONE_PLAYER') actions.current.add('start');
+        if (player === 1 && (button === 'A' || button === 'B')) {
+          audio.unlock();
+          actions.current.add(button === 'A' ? 'a' : 'b');
+        }
+
+        if (button === 'ONE_PLAYER') {
+          audio.unlock();
+          actions.current.add('start');
+        }
+
         if (button === 'TWO_PLAYER') actions.current.add('mute');
       });
     });
@@ -226,7 +233,7 @@ export function App() {
       active = false;
       arcade.current = null;
     };
-  }, []);
+  }, [audio]);
 
   useEffect(() => {
     if (arcadeEmbedded) return;
@@ -248,8 +255,11 @@ export function App() {
         actions.current.add('start');
       }
 
-      if (!event.repeat && event.code === 'KeyZ') actions.current.add('a');
-      if (!event.repeat && event.code === 'KeyX') actions.current.add('b');
+      if (!event.repeat && (event.code === 'KeyZ' || event.code === 'KeyX')) {
+        audio.unlock();
+        actions.current.add(event.code === 'KeyZ' ? 'a' : 'b');
+      }
+
       if (!event.repeat && event.code === 'KeyM') toggleSound();
       if (!keyDirection[event.code]) return;
 
@@ -331,6 +341,12 @@ export function App() {
         z: Number(movement.has('down')) - Number(movement.has('up')) + stick.current.z,
       });
 
+      for (const cue of ride.cues.splice(0)) {
+        const source = cue === 'speaker' ? ride.encounter?.location : undefined;
+
+        audio.cue(cue, source ? (source.x - ride.fluid.x) / 4.5 : 0);
+      }
+
       view.draw(dt);
 
       audio.performance(
@@ -339,12 +355,6 @@ export function App() {
       );
 
       audio.travel(ride.phase === 'running', ride.renderSpeed);
-
-      for (const cue of ride.cues.splice(0)) {
-        const source = cue === 'speaker' ? ride.encounter?.location : undefined;
-
-        audio.cue(cue, source ? (source.x - ride.fluid.x) / 4.5 : 0);
-      }
 
       const speaker = ride.act;
 
@@ -400,6 +410,11 @@ export function App() {
   const activePower = hud.power ?? hud.sustainedPower;
   const ended = hud.phase === 'popped';
   const result = showResult;
+
+  function usePower(slot: 0 | 1) {
+    audio.unlock();
+    ride.usePower(slot);
+  }
 
   function setTouchDirection(pointer: number, direction?: string) {
     if (direction) touches.current.set(pointer, direction);
@@ -560,7 +575,7 @@ export function App() {
             onStick={(input) => {
               stick.current = input;
             }}
-            onPower={(slot) => ride.usePower(slot)}
+            onPower={usePower}
           >
             {startButton || null}
           </TouchControls>
@@ -575,7 +590,7 @@ export function App() {
                   type="button"
                   disabled={!power || ended}
                   aria-label={powerSlotLabel(power, slot)}
-                  onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
+                  onClick={() => usePower(slot === 0 ? 0 : 1)}
                 >
                   <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
                   {power === 'cool' && ` · −${COOL_POINTS} Squished`}

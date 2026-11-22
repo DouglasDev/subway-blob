@@ -25,3 +25,20 @@ Each encounter plays a one-shot vocal reaction from a nearby rider two seconds a
 The disruptive loudspeaker uses [Last stop.wav by jerk01](https://freesound.org/people/jerk01/sounds/86938/), a CC0 recording of an MTA R160 announcement. The game uses the 5.12–8.82 s excerpt with a narrow band-pass, distortion, and short echoes, plus a synthesized microphone crackle and feedback cue. Annoying Alarm uses an original repeating siren. OMNY Card Toss has separate synthesized swish and landing taps, and the rhino has a synthesized thud and snort timed to contact. Train jolts, sticky soda, the shove, Super Fluid, and the expanded pop are synthesized in the game. Background rider reactions reuse the credited recordings at lower volume.
 
 The two Brooklyn-accent reactions use [WAS THAT ME OR ONE OF YOU GUYS.wav by metrostock99](https://freesound.org/people/metrostock99/sounds/514704/) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The game uses the 2.34–4.53 s and 6.25–8.61 s excerpts, trimmed, filtered, and faded to mono.
+
+The 12 subway complaints below use six male and six female American English presets from the Apache-2.0 [Kokoro-82M v1.0 speech model](https://huggingface.co/hexgrad/Kokoro-82M), rendered offline with [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx). The original lines were trimmed, filtered, lightly compressed, and bundled as mono MP3s. The existing Brooklyn recordings and other background reactions remain in the rotation.
+
+| File | Voice preset | Line                                    |
+| ---- | ------------ | --------------------------------------- |
+| 01   | am_adam      | Hey! Watch where ya goin'.              |
+| 02   | af_sarah     | I'm tryin' to get off here.             |
+| 03   | am_echo      | Buddy, that's my foot.                  |
+| 04   | af_nicole    | You're leanin' on me.                   |
+| 05   | am_onyx      | Take the backpack off, will ya?         |
+| 06   | af_heart     | Can you move down a little?             |
+| 07   | am_michael   | That seat's for people, not your bag.   |
+| 08   | af_bella     | Some of us gotta get to work.           |
+| 09   | am_fenrir    | Who brought a bike into this mess?      |
+| 10   | af_river     | You got a whole train. Why my elbow?    |
+| 11   | am_puck      | Can we get one normal stop?             |
+| 12   | af_jessica   | Oh, come on. The doors are right there. |

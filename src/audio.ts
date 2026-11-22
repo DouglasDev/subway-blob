@@ -1,11 +1,7 @@
 import { ENCOUNTERS } from './sim/encounters.ts';
 import type { Cue, Encounter } from './sim/encounters.ts';
 
-const music = {
-  roll: new URL('./assets/rolling.mp3', import.meta.url).href,
-  announcement: new URL('./assets/announcement.mp3', import.meta.url).href,
-  chime: new URL('./assets/chime.mp3', import.meta.url).href,
-};
+const rolling = new URL('./assets/rolling.mp3', import.meta.url).href;
 
 const performances = {
   acrobat: new URL('./assets/showtime.mp3', import.meta.url).href,
@@ -35,18 +31,17 @@ function isEncounter(cue: Cue): cue is Encounter {
   return Object.hasOwn(ENCOUNTERS, cue);
 }
 
-const powerEffects = {
-  crazy: new URL('./assets/crazy.mp3', import.meta.url).href,
-  fart: new URL('./assets/fart.mp3', import.meta.url).href,
-  vomit: new URL('./assets/vomit.mp3', import.meta.url).href,
-};
-
 const sampleFiles = {
-  annoy: new URL('./assets/alarm-siren.mp3', import.meta.url).href,
-  omny: new URL('./assets/omny-toss.mp3', import.meta.url).href,
-  omnyLand: new URL('./assets/omny-land.mp3', import.meta.url).href,
-  rhino: new URL('./assets/rhino-bump.mp3', import.meta.url).href,
-  speaker: new URL('./assets/muffled-pa.mp3', import.meta.url).href,
+  announcement: { url: new URL('./assets/announcement.mp3', import.meta.url).href, volume: 0.48 },
+  chime: { url: new URL('./assets/chime.mp3', import.meta.url).href, volume: 0.61 },
+  crazy: { url: new URL('./assets/crazy.mp3', import.meta.url).href, volume: 0.75 },
+  fart: { url: new URL('./assets/fart.mp3', import.meta.url).href, volume: 0.91 },
+  vomit: { url: new URL('./assets/vomit.mp3', import.meta.url).href, volume: 0.75 },
+  annoy: { url: new URL('./assets/alarm-siren.mp3', import.meta.url).href, volume: 0.93 },
+  omny: { url: new URL('./assets/omny-toss.mp3', import.meta.url).href, volume: 0.91 },
+  omnyLand: { url: new URL('./assets/omny-land.mp3', import.meta.url).href, volume: 0.85 },
+  rhino: { url: new URL('./assets/rhino-bump.mp3', import.meta.url).href, volume: 0.91 },
+  speaker: { url: new URL('./assets/muffled-pa.mp3', import.meta.url).href, volume: 1 },
 };
 
 type SampleCue = keyof typeof sampleFiles;
@@ -110,9 +105,7 @@ const impacts: Partial<Record<Cue, readonly [number, number, number]>> = {
 };
 
 export class RideAudio {
-  private readonly roll = clip(music.roll, 0.26, true);
-  private readonly announcement = clip(music.announcement, 0.48);
-  private readonly chime = clip(music.chime, 0.61);
+  private readonly roll = clip(rolling, 0.26, true);
   private readonly performanceClips = {
     acrobat: clip(performances.acrobat, 0.59, true),
     musician: performances.musician.map((url) => clip(url, 0.54, true)),
@@ -131,36 +124,30 @@ export class RideAudio {
     reactions.ac!,
     new URL('./assets/brooklyn-complaint.mp3', import.meta.url).href,
     new URL('./assets/brooklyn-figures.mp3', import.meta.url).href,
-  ].map((url) => clip(url, 0.31));
-  private murmurIndex = -1;
-  private readonly effects = {
-    crazy: clip(powerEffects.crazy, 0.75),
-    fart: clip(powerEffects.fart, 0.91),
-    vomit: clip(powerEffects.vomit, 0.75),
-  };
-  private readonly samples = {
-    annoy: clip(sampleFiles.annoy, 0.87),
-    omny: clip(sampleFiles.omny, 0.91),
-    omnyLand: clip(sampleFiles.omnyLand, 0.85),
-    rhino: clip(sampleFiles.rhino, 0.91),
-    speaker: clip(sampleFiles.speaker, 1),
-  };
+    ...Array.from({ length: 12 }, (_, i) => {
+      const name = String(i + 1).padStart(2, '0');
+
+      return new URL(`./assets/passengers/complaint-${name}.mp3`, import.meta.url).href;
+    }),
+  ].map((url) => clip(url, 0.39));
+  private readonly murmurBag: HTMLAudioElement[] = [];
+  private activeMurmur?: HTMLAudioElement;
+  private readonly samples = new Map<SampleCue, Promise<AudioBuffer | undefined>>();
   private readonly sampleBuffers = new Map<SampleCue, AudioBuffer>();
-  private readonly playingSamples = new Map<SampleCue, AudioBufferSourceNode>();
+  private readonly playingSamples = new Map<SampleCue, Set<() => void>>();
+  private readonly fallbackPlayers = new Set<HTMLAudioElement>();
   private readonly clips = [
     this.roll,
-    this.announcement,
-    this.chime,
     this.performanceClips.acrobat,
     ...this.performanceClips.musician,
     this.performanceClips.prank,
     ...this.guestReactions.values(),
     ...this.murmurs,
-    ...Object.values(this.samples),
-    ...Object.values(this.effects),
   ];
   private context?: AudioContext;
   private bus?: GainNode;
+  private resuming?: Promise<void>;
+  private playbackGeneration = 0;
   private allowed = false;
   private muted = false;
   private rolling = false;
@@ -174,12 +161,16 @@ export class RideAudio {
       if (!this.context) {
         this.context = new AudioContext();
         this.bus = this.context.createGain();
-        this.bus.connect(this.context.destination);
+        const limiter = this.context.createDynamicsCompressor();
+
+        limiter.threshold.value = -8;
+        limiter.ratio.value = 5;
+        this.bus.connect(limiter).connect(this.context.destination);
         this.bus.gain.value = this.muted ? 0 : 1;
         this.loadSamples(this.context);
       }
 
-      void this.context.resume().catch(() => {});
+      this.resumeAudio();
     } catch {
       // Recorded audio and gameplay can operate independently.
     }
@@ -188,7 +179,10 @@ export class RideAudio {
   setMute(muted: boolean) {
     this.muted = muted;
 
+    if (muted) this.playbackGeneration++;
+
     for (const clip of this.clips) clip.muted = muted;
+    for (const clip of this.fallbackPlayers) clip.muted = muted;
     if (this.bus && this.context)
       this.bus.gain.setTargetAtTime(muted ? 0 : 1, this.context.currentTime, 0.035);
   }
@@ -196,7 +190,9 @@ export class RideAudio {
   travel(running: boolean, speed: number) {
     if (running === this.rolling) {
       if (running) {
-        this.roll.volume = (0.08 + speed * 0.35) * (this.activePerformance ? 0.55 : 1);
+        const duck = this.playingSamples.has('annoy') ? 0.27 : this.activePerformance ? 0.55 : 1;
+
+        this.roll.volume = (0.08 + speed * 0.35) * duck;
         this.roll.playbackRate = 0.75 + 0.27 * speed;
       }
 
@@ -220,7 +216,8 @@ export class RideAudio {
     if (active) {
       const volume = kind === 'musician' ? 0.54 : kind === 'acrobat' ? 0.59 : 0.61;
       const reacting =
-        this.speakerPlaying ||
+        this.playingSamples.has('annoy') ||
+        this.playingSamples.has('speaker') ||
         (this.activeReaction && !this.activeReaction.paused && !this.activeReaction.ended);
 
       active.volume = reacting ? volume * 0.42 : volume;
@@ -236,7 +233,9 @@ export class RideAudio {
 
   cue(cue: Cue, pan = 0) {
     if (cue === 'pop') {
+      this.playbackGeneration++;
       this.activeReaction?.pause();
+      this.activeMurmur?.pause();
       this.stopSample('speaker');
     }
 
@@ -244,6 +243,7 @@ export class RideAudio {
 
     if (isSample(cue)) {
       if (cue === 'speaker') this.activeReaction?.pause();
+      if (cue === 'speaker' || cue === 'annoy') this.activeMurmur?.pause();
       this.playSample(cue, pan);
 
       return;
@@ -252,6 +252,7 @@ export class RideAudio {
     const reaction = isEncounter(cue) ? this.guestReactions.get(cue) : undefined;
 
     if (reaction) {
+      this.activeMurmur?.pause();
       this.activeReaction?.pause();
       this.activeReaction = reaction;
       this.play(reaction);
@@ -260,41 +261,57 @@ export class RideAudio {
     }
 
     if (cue === 'murmur') {
-      if (this.speakerPlaying) return;
-      if (this.activeReaction && !this.activeReaction.paused && !this.activeReaction.ended) return;
-
-      this.murmurIndex =
-        (this.murmurIndex + 1 + Math.floor(Math.random() * (this.murmurs.length - 1))) %
-        this.murmurs.length;
-
-      this.play(this.murmurs[this.murmurIndex]);
+      this.playMurmur();
 
       return;
     }
 
-    if (cue === 'crazy' || cue === 'fart' || cue === 'vomit') {
-      this.play(this.effects[cue]);
+    if (!sounds[cue] && !impacts[cue]) return;
 
-      return;
+    if (this.context?.state === 'running') this.playSynth(cue);
+    else this.whenAudioResumes(() => this.playSynth(cue));
+  }
+
+  private playMurmur() {
+    if (this.playingSamples.has('speaker') || this.playingSamples.has('annoy')) return;
+    if (this.activeReaction && !this.activeReaction.paused && !this.activeReaction.ended) return;
+    if (this.activeMurmur && !this.activeMurmur.paused && !this.activeMurmur.ended) return;
+
+    if (this.murmurBag.length === 0) {
+      this.murmurBag.push(...this.murmurs);
+
+      for (let i = this.murmurBag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+
+        [this.murmurBag[i], this.murmurBag[j]] = [this.murmurBag[j], this.murmurBag[i]];
+      }
+
+      const last = this.murmurBag.length - 1;
+
+      if (this.murmurBag[last] === this.activeMurmur)
+        [this.murmurBag[last], this.murmurBag[0]] = [this.murmurBag[0], this.murmurBag[last]];
     }
 
-    if (cue === 'announcement' || cue === 'chime') {
-      this.play(cue === 'announcement' ? this.announcement : this.chime);
+    const line = this.murmurBag.pop()!;
 
-      return;
-    }
+    this.activeMurmur = line;
+    this.play(line);
+  }
 
-    if (!this.context || this.context.state !== 'running' || !this.bus) return;
+  private playSynth(cue: Cue) {
+    const { context, bus } = this;
+
+    if (!context || !bus) return;
 
     const impact = impacts[cue];
 
     if (impact) this.impact(...impact);
 
     for (const note of sounds[cue] ?? []) {
-      const start = this.context.currentTime + note.at;
+      const start = context.currentTime + note.at;
       const end = start + note.length;
-      const oscillator = this.context.createOscillator();
-      const gain = this.context.createGain();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
 
       oscillator.type = note.shape ?? 'triangle';
       oscillator.frequency.setValueAtTime(note.pitch, start);
@@ -303,7 +320,7 @@ export class RideAudio {
       gain.gain.linearRampToValueAtTime(0.073, start + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.001, end);
       oscillator.connect(gain);
-      gain.connect(this.bus);
+      gain.connect(bus);
       oscillator.start(start);
       oscillator.stop(end + 0.01);
     }
@@ -334,52 +351,130 @@ export class RideAudio {
     source.start(start);
   }
 
-  private get speakerPlaying() {
-    return (
-      this.playingSamples.has('speaker') ||
-      (!this.samples.speaker.paused && !this.samples.speaker.ended)
-    );
+  private resumeAudio() {
+    const { context } = this;
+
+    if (!context || context.state === 'running' || context.state === 'closed') return;
+
+    this.resuming ??= context
+      .resume()
+      .catch(() => {})
+      .finally(() => {
+        this.resuming = undefined;
+      });
+
+    return this.resuming;
+  }
+
+  private recentPlayback() {
+    const generation = this.playbackGeneration;
+    const deadline = performance.now() + 750;
+
+    return () => this.playbackGeneration === generation && performance.now() <= deadline;
+  }
+
+  private whenAudioResumes(play: () => void) {
+    const recent = this.recentPlayback();
+
+    void this.resumeAudio()?.then(() => {
+      if (recent() && this.context?.state === 'running') play();
+    });
   }
 
   private loadSamples(context: AudioContext) {
     for (const cue of Object.keys(sampleFiles) as SampleCue[]) {
-      void fetch(sampleFiles[cue])
+      const sample = fetch(sampleFiles[cue].url)
         .then((response) => {
           if (!response.ok) throw new Error('Could not load sound effect');
 
           return response.arrayBuffer();
         })
         .then((data) => context.decodeAudioData(data))
-        .then((buffer) => this.sampleBuffers.set(cue, buffer))
-        .catch(() => {});
+        .then((buffer) => {
+          this.sampleBuffers.set(cue, buffer);
+
+          return buffer;
+        })
+        .catch(() => undefined);
+
+      this.samples.set(cue, sample);
     }
+  }
+
+  private trackSample(cue: SampleCue, stop: () => void) {
+    const instances = this.playingSamples.get(cue) ?? new Set<() => void>();
+
+    instances.add(stop);
+    this.playingSamples.set(cue, instances);
+
+    return () => {
+      instances.delete(stop);
+
+      if (instances.size === 0 && this.playingSamples.get(cue) === instances)
+        this.playingSamples.delete(cue);
+    };
   }
 
   private stopSample(cue: SampleCue) {
-    const source = this.playingSamples.get(cue);
+    const instances = this.playingSamples.get(cue);
 
     this.playingSamples.delete(cue);
-    source?.stop();
-    this.samples[cue].pause();
+
+    for (const stop of instances ?? []) stop();
   }
 
   private playSample(cue: SampleCue, pan: number) {
-    const { context, bus } = this;
     const buffer = this.sampleBuffers.get(cue);
 
-    this.stopSample(cue);
-
-    if (!buffer || !context || context.state !== 'running' || !bus) {
-      this.play(this.samples[cue]);
+    if (buffer && this.context?.state === 'running') {
+      this.playBuffer(cue, buffer, pan);
 
       return;
     }
+
+    const { url, volume } = sampleFiles[cue];
+    const fallback = clip(url, volume);
+    const recent = this.recentPlayback();
+    let stopped = false;
+    const cleanup = this.trackSample(cue, () => {
+      stopped = true;
+      fallback.pause();
+      this.fallbackPlayers.delete(fallback);
+    });
+
+    const ended = () => {
+      cleanup();
+      this.fallbackPlayers.delete(fallback);
+    };
+
+    fallback.addEventListener('ended', ended, { once: true });
+    fallback.addEventListener('error', ended, { once: true });
+    this.fallbackPlayers.add(fallback);
+
+    void fallback.play().catch(async () => {
+      ended();
+
+      if (stopped || !recent()) return;
+
+      const decoded = await this.samples.get(cue);
+
+      if (!decoded || !recent()) return;
+
+      await this.resumeAudio();
+      if (recent() && this.context?.state === 'running') this.playBuffer(cue, decoded, pan);
+    });
+  }
+
+  private playBuffer(cue: SampleCue, buffer: AudioBuffer, pan: number) {
+    const { context, bus } = this;
+
+    if (!context || !bus) return;
 
     const player = context.createBufferSource();
     const gain = context.createGain();
 
     player.buffer = buffer;
-    gain.gain.value = this.samples[cue].volume;
+    gain.gain.value = sampleFiles[cue].volume;
     player.connect(gain);
 
     if (cue === 'speaker' && typeof context.createStereoPanner === 'function') {
@@ -389,18 +484,17 @@ export class RideAudio {
       gain.connect(placement).connect(bus);
     } else gain.connect(bus);
 
-    player.onended = () => {
-      if (this.playingSamples.get(cue) === player) this.playingSamples.delete(cue);
-    };
-
-    this.playingSamples.set(cue, player);
+    player.onended = this.trackSample(cue, () => player.stop());
     player.start();
   }
 
   reset() {
+    this.playbackGeneration++;
     this.rolling = false;
     this.activePerformance = undefined;
     this.activeReaction = undefined;
+    this.activeMurmur = undefined;
+    this.murmurBag.length = 0;
 
     for (const cue of this.playingSamples.keys()) this.stopSample(cue);
 
