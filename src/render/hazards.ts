@@ -39,10 +39,12 @@ export function buildHazards(car: T.Object3D) {
         uniform float pulse;
         void main() {
           float d = length((floorUV - 0.5) * room - center);
-          float rim = 1.0 - smoothstep(0.018, 0.058, abs(d - radius));
-          float wave = (1.0 - smoothstep(0.015, 0.095, abs(d - radius * pulse))) * (1.0 - pulse);
-          float field = (1.0 - smoothstep(0.0, radius, d)) * 0.20;
-          gl_FragColor = vec4(1.0, 0.105 + wave * 0.18, 0.075, max(rim * 0.88, max(wave * 0.95, field)));
+          float rim = 1.0 - smoothstep(0.022, 0.064, abs(d - radius));
+          float inside = 1.0 - smoothstep(radius - 0.05, radius, d);
+          float wave = (1.0 - smoothstep(0.032, 0.145, abs(d - radius * pulse))) * inside;
+          float fill = inside * (0.25 + 0.07 * cos(pulse * 6.283));
+          float opacity = max(0.89 * rim, mix(fill, 0.86, wave));
+          gl_FragColor = vec4(1.0, 0.035, 0.064, opacity);
         }
       `,
     }),
@@ -139,7 +141,7 @@ export function buildHazards(car: T.Object3D) {
       dangerUniforms.radius.value = danger.radius;
       const began = event?.kind === 'sneezy' ? ride.sneeze?.at : event?.began;
 
-      dangerUniforms.pulse.value = ((ride.time - (began ?? ride.time)) * 0.98) % 1;
+      dangerUniforms.pulse.value = ((ride.time - (began ?? ride.time)) * 1.38) % 1;
     }
 
     speaker.visible = !!location && event?.kind === 'speaker';

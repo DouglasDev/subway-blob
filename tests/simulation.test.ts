@@ -879,20 +879,36 @@ test('Super Fluid reaches farther through a one-cell passage at the same volume'
   assertVolume(ride.fluid, ride.mask);
 });
 
-test('Super Fluid lowers the occupied surface without changing volume', () => {
-  const { car } = new Ride();
-  const fluid = new Fluid(car.grid, STANDARD_VOLUME, 0, 0);
-  const mask = new Uint8Array(car.grid.size);
+test('Super Fluid stays upright and narrows across the shoulders at the same volume', () => {
+  const { grid } = new Ride().car;
+  const mask = new Uint8Array(grid.size);
 
-  const top = () => Math.max(...fluid.cells.map((id) => car.grid.centers[id * 3 + 1]));
+  for (const facing of [0, Math.PI / 2]) {
+    const fluid = new Fluid(grid, STANDARD_VOLUME, 0, 0);
+    const lateral = facing === 0 ? 0 : 2;
+    const forward = facing === 0 ? 2 : 0;
 
-  assert.ok(fluid.step(mask));
-  const standing = top();
+    const span = (axis: number) => {
+      const positions = fluid.cells.map((id) => grid.centers[id * 3 + axis]);
 
-  for (let tick = 0; tick < 7; tick++) assert.ok(fluid.step(mask, 0, 0, STANDARD_VOLUME, 0, true));
+      return Math.max(...positions) - Math.min(...positions) + grid.cell;
+    };
 
-  assert.ok(top() < standing * 0.55);
-  assertVolume(fluid, mask);
+    assert.ok(fluid.step(mask, 0, 0, STANDARD_VOLUME, facing));
+
+    const height = span(1);
+    const width = span(lateral);
+    const depth = span(forward);
+
+    for (let tick = 0; tick < 7; tick++) {
+      assert.ok(fluid.step(mask, 0, 0, STANDARD_VOLUME, facing, true));
+      assertVolume(fluid, mask);
+    }
+
+    assert.equal(span(1), height);
+    assert.ok(span(lateral) < width * 0.75);
+    assert.ok(span(forward) > depth);
+  }
 });
 
 test('Slime Spray only hits the cone in front of the blob', () => {

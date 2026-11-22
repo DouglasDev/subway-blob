@@ -42,7 +42,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   const car = new T.Group();
 
   scene.add(car);
-  const updateDoors = buildCar(car);
+  const updateCar = buildCar(car);
   const updateTrack = buildTrack(scene);
   const updateCrowd = buildRiders(car);
   const updateObjects = buildRideObjects(car);
@@ -138,7 +138,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       car.rotation.z = -jolt * 0.028;
 
       if (lastTick !== ride.time || lastPhase !== ride.phase) {
-        updateDoors(ride.door);
+        updateCar(ride.door, ride.stop);
         const acrobat =
           ride.act?.role === 'acrobat' && ride.encounter
             ? {
@@ -158,7 +158,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
             ? { id: shover.id, age: ride.time - shove.at, heading: Math.atan2(shove.x, shove.z) }
             : undefined,
           ride.act?.role === 'sneezy' && ride.sneeze
-            ? { id: ride.act.id, age: ride.time - ride.sneeze.at }
+            ? { id: ride.act.id, age: ride.time - ride.sneeze.at, at: ride.sneeze.at }
             : undefined,
         );
 

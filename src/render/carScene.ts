@@ -93,23 +93,38 @@ function label(
   return mesh;
 }
 
-function addLedDisplay(car: T.Object3D, x: number, y: number, z: number, message: string) {
+const ledMessages = [
+  'NEXT STOP: YOUR NAP',
+  'SIGNAL SAID MAYBE',
+  'PIGEON IN CHARGE',
+  'MIND THE NAP',
+  'MOOD: LOCAL',
+  'JUST ONE MORE STOP',
+  'DELAYED BY A BAGEL',
+  'RATS HAVE PRIORITY',
+  'EXPRESS TO NOWHERE',
+  'PLEASE HOLD YOUR BAGEL',
+  'OOZE STANDS CLEAR',
+  'DOORS NEED A MINUTE',
+];
+
+function addLedDisplay(car: T.Object3D, x: number, y: number, z: number, offset: number) {
   const width = 1.39;
   const height = 0.205;
+  const lettering = document.createElement('canvas');
 
-  box(car, ink, x, y, z, width + 0.07, height + 0.052, 0.047);
+  lettering.width = 142;
+  lettering.height = 19;
+  const dots = lettering.getContext('2d', { willReadFrequently: true })!;
 
-  label(car, width, height, x, y, z + 0.027, '#231315', (ctx) => {
-    // Rasterize the letters at the LED pitch, then draw individual lit pixels.
-    const lettering = document.createElement('canvas');
+  dots.font = 'bold 12px monospace';
+  dots.textAlign = 'center';
+  dots.textBaseline = 'middle';
 
-    lettering.width = 142;
-    lettering.height = 19;
-    const dots = lettering.getContext('2d')!;
+  function draw(ctx: CanvasRenderingContext2D, stop: number) {
+    const message = ledMessages[(stop + offset) % ledMessages.length];
 
-    dots.font = 'bold 12px monospace';
-    dots.textAlign = 'center';
-    dots.textBaseline = 'middle';
+    dots.clearRect(0, 0, lettering.width, lettering.height);
     dots.fillText(message, lettering.width / 2, lettering.height / 2 + 0.4, 134);
     const { data } = dots.getImageData(0, 0, lettering.width, lettering.height);
     const pitchX = ctx.canvas.width / lettering.width;
@@ -123,7 +138,17 @@ function addLedDisplay(car: T.Object3D, x: number, y: number, z: number, message
         ctx.fillRect(column * pitchX + 0.7, row * pitchY + 0.7, pitchX - 1.4, pitchY - 1.4);
       }
     }
-  });
+  }
+
+  box(car, ink, x, y, z, width + 0.07, height + 0.052, 0.047);
+  const panel = label(car, width, height, x, y, z + 0.027, '#231315', (ctx) => draw(ctx, 0));
+  const map = panel.material.map!;
+  const ctx = (map.image as HTMLCanvasElement).getContext('2d')!;
+
+  return (stop: number) => {
+    draw(ctx, stop);
+    map.needsUpdate = true;
+  };
 }
 
 export function buildCar(scene: T.Object3D) {
@@ -131,6 +156,8 @@ export function buildCar(scene: T.Object3D) {
   const back = -CAR_WIDTH / 2;
   const { floor, wall } = interiorMaterials();
   const leaves: { mesh: T.Group; x: number; sign: number }[] = [];
+  const displays: ((stop: number) => void)[] = [];
+  let displayedStop = 0;
 
   scene.add(car);
   box(car, darkSteel, 0, -0.25, 0, CAR_LENGTH + 0.12, 0.43, CAR_WIDTH + 0.16);
@@ -272,17 +299,18 @@ export function buildCar(scene: T.Object3D) {
       box(car, wall, body + side * 1.681, 1.022, 0, 0.116, 2.05, 2.4);
     }
 
-    addLedDisplay(
-      car,
-      x + sign * 0.93,
-      1.56,
-      1.232,
-      sign < 0 ? 'NEXT STOP: YOUR NAP' : 'DELAYED BY A BAGEL',
+    displays.push(
+      addLedDisplay(car, x + sign * 0.93, 1.56, 1.232, sign < 0 ? 0 : ledMessages.length / 2),
     );
   }
 
-  return (door: number) => {
+  return (door: number, stop = 0) => {
     for (const { mesh, x, sign } of leaves) mesh.position.x = x + sign * door * 0.665;
+
+    if (stop === displayedStop) return;
+
+    displayedStop = stop;
+    for (const update of displays) update(stop);
   };
 }
 

@@ -2,6 +2,7 @@ import * as T from 'three';
 import type { Rider } from '../sim/crowd.ts';
 import { SPREADER_LEG, spreaderHeading, spreaderSitting } from '../sim/hazards.ts';
 import { garment, riderStyle, shirts } from './wardrobe';
+import { buildSneezeSpray } from './sneezeSpray';
 
 type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role' | 'trajectory'>;
 
@@ -47,6 +48,10 @@ export function buildRiders(scene: T.Object3D) {
   const marker = new T.Object3D();
   const joint = new T.Object3D();
   const jointMatrix = new T.Matrix4();
+  const upperMatrix = new T.Matrix4();
+  const hipOffset = new T.Matrix4().makeTranslation(0, -0.84, 0);
+  const mouth = new T.Vector3();
+  const sneezeSpray = buildSneezeSpray(scene);
   const matrix = new T.Matrix4();
   const color = new T.Color();
   const up = new T.Vector3(0, 1, 0);
@@ -76,11 +81,11 @@ export function buildRiders(scene: T.Object3D) {
     seatedLegs.setColorAt(index, color.setHex(shade));
   }
 
-  function hinge(x: number, y: number, z: number, angle: number) {
+  function hinge(x: number, y: number, z: number, angle: number, parent = person.matrix) {
     joint.position.set(x, y, z);
     joint.rotation.x = angle;
     joint.updateMatrix();
-    jointMatrix.multiplyMatrices(person.matrix, joint.matrix);
+    jointMatrix.multiplyMatrices(parent, joint.matrix);
   }
 
   function stamp(
@@ -108,13 +113,14 @@ export function buildRiders(scene: T.Object3D) {
     riders: Figure[],
     acrobat?: { id: number; move: number; age: number },
     shove?: { id: number; age: number; heading: number },
-    sneeze?: { id: number; age: number },
+    sneeze?: { id: number; age: number; at: number },
   ) => {
     const counts = new Uint16Array(torso.length);
     let hairCount = 0;
     let legCount = 0;
     let seatedLegCount = 0;
     let hemCount = 0;
+    let spray: Parameters<typeof sneezeSpray>[0];
 
     for (const [index, rider] of riders.entries()) {
       const { id, x, z, stride, role } = rider;
@@ -147,11 +153,6 @@ export function buildRiders(scene: T.Object3D) {
         person.rotation.y = shove.heading;
         person.rotation.x = pushing * 0.16;
       }
-
-      const sneezing =
-        sneeze?.id === id && sneeze.age < 0.46 ? Math.sin((Math.PI * sneeze.age) / 0.46) : 0;
-
-      if (sneezing) person.rotation.x = sneezing * 0.29;
 
       if (acrobat?.id === id && !stride) {
         const beat = acrobat.age * 4.6;
@@ -196,12 +197,29 @@ export function buildRiders(scene: T.Object3D) {
       person.scale.setScalar(size);
       person.updateMatrix();
 
-      stamp(torso[kind], counts[kind]++, 0xffffff, 0, 1.08, 0, 0.36, 0.56, 0.23);
-      stamp(head, index, skin, 0, 1.52, 0.014, 0.127, 0.167, 0.126);
-      for (const [x, y, z, sx, sy, sz] of style.hair)
-        stamp(hair, hairCount++, style.dye, x, y, z, sx, sy, sz);
+      const sneezePose = sneeze?.id === id && sneeze.age < 0.78 ? sneeze : undefined;
+      const bob =
+        sneezePose && sneezePose.age < 0.44
+          ? Math.sin(Math.PI * (sneezePose.age / 0.44) ** 0.68) * 0.64
+          : 0;
+      let upper = person.matrix;
 
-      stamp(bags, index, 0x354348, 0, 1.05, -0.16, id % 3 === 0 ? 0.25 : 0, 0.33, 0.12);
+      if (bob) {
+        hinge(0, hipY, 0, bob);
+        upper = upperMatrix.copy(jointMatrix).multiply(hipOffset);
+      }
+
+      if (sneezePose) {
+        mouth.set(0, 1.46, 0.13).applyMatrix4(upper);
+        spray = { ...sneezePose, mouth, heading: person.rotation.y };
+      }
+
+      stamp(torso[kind], counts[kind]++, 0xffffff, 0, 1.08, 0, 0.36, 0.56, 0.23, 0, upper);
+      stamp(head, index, skin, 0, 1.52, 0.014, 0.127, 0.167, 0.126, 0, upper);
+      for (const [x, y, z, sx, sy, sz] of style.hair)
+        stamp(hair, hairCount++, style.dye, x, y, z, sx, sy, sz, 0, upper);
+
+      stamp(bags, index, 0x354348, 0, 1.05, -0.16, id % 3 === 0 ? 0.25 : 0, 0.33, 0.12, 0, upper);
 
       if (skirt) {
         const length = long ? 0.62 : 0.36;
@@ -264,10 +282,8 @@ export function buildRiders(scene: T.Object3D) {
           sign * 0.202,
           1.315,
           0.006,
-          -angle * 0.8 -
-            pushing * 1.4 -
-            sneezing * (sign > 0 ? 2.25 : 0.32) -
-            (role === 'musician' ? 1.04 : 0),
+          -angle * 0.8 - pushing * 1.4 - (role === 'musician' ? 1.04 : 0),
+          upper,
         );
 
         stamp(arms, limb, jacket, 0, -0.255, 0, 0.092, 0.51, 0.11, 0, jointMatrix);
@@ -322,6 +338,7 @@ export function buildRiders(scene: T.Object3D) {
       }
     }
 
+    sneezeSpray(spray);
     head.count = bags.count = riders.length;
     arms.count = riders.length * 2;
     shoes.count = riders.length * 4;

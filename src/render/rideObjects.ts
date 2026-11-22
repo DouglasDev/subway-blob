@@ -38,9 +38,6 @@ export function buildRideObjects(scene: T.Object3D) {
   scene.add(thrownCard);
 
   const luggage = new Map<number, T.Group>();
-  const stageMark = part(scene, new T.RingGeometry(0.44, 0.5, 20), 0xffc963);
-
-  stageMark.rotation.x = -Math.PI / 2;
   const updateGags = buildGags(scene);
   const updateInstruments = buildInstruments(scene);
   const mic = part(scene, new T.BoxGeometry(0.105, 0.055, 0.045), 0xeeb641);
@@ -185,16 +182,6 @@ export function buildRideObjects(scene: T.Object3D) {
     );
 
     mic.visible = act === 'takes';
-    stageMark.visible = !!actor;
-
-    if (!actor) return;
-
-    mic.position.set(actor.x + 0.21, 1.31, actor.z + 0.18);
-    stageMark.position.set(actor.x, 0.018, actor.z);
-    stageMark.scale.setScalar(1 + 0.15 * Math.sin(elapsed * 8) + ride.guestPressure * 0.16);
-
-    (stageMark.material as T.MeshStandardMaterial).color.setHex(
-      ride.guestPressure > 0 ? 0xf17340 : 0xffc963,
-    );
+    if (actor && mic.visible) mic.position.set(actor.x + 0.21, 1.31, actor.z + 0.18);
   };
 }

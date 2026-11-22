@@ -102,15 +102,21 @@ export class Fluid {
     let comfortable = 0;
     const cos = Math.cos(facing);
     const sin = Math.sin(facing);
+    // Trade width for depth, preserving the upright profile and its volume.
+    const width = superFluid ? 0.62 : 1;
 
     for (const id of candidates) {
       const offset = id * 3;
       const localX = grid.centers[offset] - x;
       const localZ = grid.centers[offset + 2] - z;
       const y = grid.centers[offset + 1];
-      const rank = bodyDistance(localX * cos - localZ * sin, y, localX * sin + localZ * cos);
+      const rank = bodyDistance(
+        (localX * cos - localZ * sin) / width,
+        y,
+        (localX * sin + localZ * cos) * width,
+      );
 
-      ranks[id] = superFluid ? localX ** 2 + localZ ** 2 + y * 1.85 : rank;
+      ranks[id] = rank;
 
       if (rank <= 0.035) comfortable++;
     }
