@@ -25,6 +25,7 @@ import {
 } from '../src/sim/encounters.ts';
 import type { Encounter } from '../src/sim/encounters.ts';
 import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
+import { Crowd } from '../src/sim/crowd.ts';
 import { Fluid } from '../src/sim/fluid.ts';
 import { RHINO_PRANK, SPREADER_X, SPREADER_Z, sprayHits } from '../src/sim/hazards.ts';
 import { Grid } from '../src/sim/grid.ts';
@@ -495,7 +496,7 @@ test('power-up exits wait for open doors and departures update the rider count',
   const original = rider.id;
 
   crowd.react('crazy', rider, 0, false);
-  assert.ok(rider.wantsExit);
+  assert.ok(rider.powerExit);
   assert.equal(rider.trajectory, undefined);
   crowd.prepare(0);
   assert.ok(crowd.riders.find(({ id }) => id === original)?.trajectory?.exits);
@@ -507,6 +508,53 @@ test('power-up exits wait for open doors and departures update the rider count',
 
   assert.ok(!crowd.riders.some(({ id }) => id === original));
   assert.ok(crowd.exited >= 1);
+});
+
+test('power-up departures can thin a light stop without reversing crowd growth', () => {
+  const { car, fluid } = new Ride();
+  const lightStops = new Set<number>();
+
+  for (const seed of [14, 315, 824]) {
+    const crowd = new Crowd(seed);
+    const counts = [crowd.onboard];
+    const lighter: number[] = [];
+
+    const exits = (doors: boolean) => {
+      // Use both slots on different parts of the car to reach different riders.
+      crowd.react('crazy', { x: -2.7, z: 0 }, 0, doors);
+      crowd.react('annoy', { x: 2.7, z: 0 }, 0, doors);
+    };
+
+    for (let stop = 0; stop < 16; stop++) {
+      if (stop % 2 === 0) exits(false);
+      crowd.prepare(stop);
+      exits(true);
+
+      for (let step = 0; step < 145; step++) {
+        crowd.update(STEP, step * STEP, fluid, car.grid, car.fixtures);
+        crowd.commitDepartures();
+      }
+
+      crowd.finishDoors();
+      const change = crowd.onboard - counts.at(-1)!;
+
+      assert.equal(change, crowd.boarded - crowd.exited);
+      assert.notEqual(change, 0);
+      counts.push(crowd.onboard);
+
+      if (change < 0) {
+        lighter.push(stop);
+        lightStops.add(stop);
+      }
+
+      if (stop >= 3) assert.ok(counts.at(-1)! > counts[stop - 3]);
+    }
+
+    assert.ok(lighter.length >= 2);
+    assert.ok(lighter.every((stop, index) => index === 0 || stop - lighter[index - 1] >= 4));
+  }
+
+  assert.ok(lightStops.size > 2, 'light boarding waves vary by ride seed');
 });
 
 test('a moved suitcase pulls its owner to a new standing position', () => {
@@ -716,8 +764,8 @@ test('Slime Spray only hits the cone in front of the blob', () => {
   ride.crowd.riders = [front, rear];
 
   ride.crowd.react('vomit', { x: 0, z: 0 }, 1, false, -Math.PI / 2);
-  assert.equal(front.wantsExit, true);
-  assert.equal(rear.wantsExit, undefined);
+  assert.equal(front.powerExit, true);
+  assert.equal(rear.powerExit, undefined);
 });
 
 test('sticky soda slows steering and chips away at the Squished meter', () => {

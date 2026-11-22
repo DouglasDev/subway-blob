@@ -18,6 +18,7 @@ export type Rider = Location & {
   trajectory?: { points: Location[]; delay: number; span: number; age: number; exits: boolean };
   role?: Encounter;
   wantsExit?: boolean;
+  powerExit?: boolean;
   rhinoRecoilUntil?: number;
   prop?: Location & { kind: 'suitcase' | 'bike'; pushed?: boolean };
   away?: Location & { until: number };
@@ -25,6 +26,8 @@ export type Rider = Location & {
 
 const BOARDING = [10, 5, 5, 6, 6, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10];
 const ZONES = 5;
+const POWER_EXITS = 2;
+const LIGHT_STOP_POWER_EXITS = 4;
 
 export class Crowd {
   riders: Rider[] = [];
@@ -34,9 +37,14 @@ export class Crowd {
   private readonly slots: Slot[] = [];
   private serial = 0;
   private readonly random: () => number;
+  private readonly boardingRandom: () => number;
+  private nextLightStop: number;
+  private powerExitsLeft = 0;
 
   constructor(seed: number) {
     this.random = seededRandom(seed);
+    this.boardingRandom = seededRandom(Math.imul(seed ^ 0xad9f381d, 0x9e3779b1));
+    this.nextLightStop = 4 + Math.floor(this.boardingRandom() * 3);
 
     for (let column = 0; column < 20; column++) {
       for (let row = 0; row < 5; row++) {
@@ -72,17 +80,35 @@ export class Crowd {
   }
 
   prepare(stop: number, encounter?: Encounter, guest?: Location) {
+    const light = stop === this.nextLightStop;
+
+    if (light) this.nextLightStop += 4 + Math.floor(this.boardingRandom() * 3);
+
     const departures = stop < 14 ? 2 : 4;
-    const leaving = this.riders.filter((rider) => rider.wantsExit);
+    const planned = this.riders.filter((rider) => rider.wantsExit);
+    const waiting = this.riders.filter((rider) => rider.powerExit);
+    const allowance = light ? LIGHT_STOP_POWER_EXITS : POWER_EXITS;
+    const queued = waiting.slice(0, allowance);
+
+    for (const rider of waiting.slice(allowance)) rider.powerExit = false;
+
     const regular = this.riders
-      .filter((rider) => !rider.wantsExit && !rider.role && !rider.trajectory)
+      .filter((rider) => !rider.wantsExit && !rider.powerExit && !rider.role && !rider.trajectory)
       .sort((a, b) => Math.abs(Math.abs(a.x) - 2.7) - Math.abs(Math.abs(b.x) - 2.7))
       .slice(0, departures);
 
-    leaving.push(...regular);
+    const leaving = [...planned, ...regular, ...queued];
     const leavingIds = new Set(leaving.map(({ id }) => id));
     const staying = this.riders.filter(({ id }) => !leavingIds.has(id)).map(({ slot }) => slot);
-    const slots = this.assign(staying, BOARDING[Math.min(stop, BOARDING.length - 1)], stop >= 2);
+    const wave = BOARDING[Math.min(stop, BOARDING.length - 1)];
+    // Keep the original crowd ramp across the lighter boarding waves.
+    const boarding = light ? planned.length + regular.length + 1 : wave + Number(stop >= 4);
+    const slots = this.assign(staying, boarding, stop >= 2);
+    const remaining = allowance - queued.length;
+
+    this.powerExitsLeft = light
+      ? remaining
+      : Math.min(remaining, Math.max(0, slots.length - leaving.length - 1));
 
     this.exited = 0;
     this.boarded = slots.length;
@@ -152,12 +178,20 @@ export class Crowd {
   }
 
   finishDoors() {
-    for (const rider of this.riders) {
-      if (rider.trajectory?.exits) rider.wantsExit = true;
-      if (rider.z >= -1.2) rider.trajectory = undefined;
-    }
+    this.riders = this.riders.filter((rider) => {
+      if (rider.z < -1.2) {
+        if (rider.trajectory?.exits) this.exited++;
+        else if (rider.trajectory) this.boarded--;
 
-    this.riders = this.riders.filter(({ z }) => z >= -1.2);
+        return false;
+      }
+
+      if (rider.trajectory?.exits && !rider.powerExit) rider.wantsExit = true;
+      rider.trajectory = undefined;
+
+      return true;
+    });
+
     this.onboard = this.riders.length;
   }
 
@@ -186,21 +220,28 @@ export class Crowd {
           !rider.role &&
           !rider.trajectory &&
           !rider.wantsExit &&
+          !rider.powerExit &&
           distance(rider) < radius &&
           (power !== 'vomit' || sprayHits(rider.x - from.x, rider.z - from.z, facing)),
       )
       .sort((a, b) => distance(a) - distance(b));
+    const available = doors
+      ? this.powerExitsLeft
+      : POWER_EXITS - this.riders.filter((rider) => rider.powerExit).length;
+    const leaving = Math.max(0, Math.min(exits, available, nearby.length));
     const omny = omnyLocation(from.x);
     const omnyEnd = from.x < 0 ? 1 : -1;
 
+    if (doors) this.powerExitsLeft -= leaving;
+
     for (const [index, rider] of nearby.entries()) {
-      if (index < exits) {
-        rider.wantsExit = true;
+      if (index < leaving) {
+        rider.powerExit = true;
 
         if (doors) this.exit(rider, 0.1 * index);
       }
 
-      if (power === 'crazy' && !rider.wantsExit) continue;
+      if (power === 'crazy' && index >= exits) break;
 
       rider.away =
         power === 'omny'

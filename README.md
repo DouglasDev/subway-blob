@@ -25,7 +25,7 @@ RCade’s web player maps the virtual controls to WASD, F, G, 1, and 2 by defaul
 
 ## Simulation
 
-The standard blob occupies 245 face-connected 10 cm cells. During an AC outage it can grow to 306 cells. Rider movement that cannot fit the blob is deferred while the player can still steer. Nearby crowds and blocked space raise squeeze. Moderate squeeze drains tolerance gradually, sustained high squeeze takes 30 seconds to pop a full blob, and finding room restores it. The blob shows its pressure immediately in its color. Crowding gets tougher on subsequent stops and the encounter lineup cycles throughout the ride. Rider departures, props, pickup collisions, and timed encounters update in the 20 Hz simulation.
+The standard blob occupies 245 face-connected 10 cm cells. During an AC outage it can grow to 306 cells. Rider movement that cannot fit the blob is deferred while the player can still steer. Nearby crowds and blocked space raise squeeze. Moderate squeeze drains tolerance gradually, sustained high squeeze takes 30 seconds to pop a full blob, and finding room restores it. The blob shows its pressure immediately in its color. Crowding gets tougher on subsequent stops and the encounter lineup cycles throughout the ride. Power-ups share a departure limit at each stop, including riders who decided to leave while the train was moving. Every four to six stops, a lighter boarding wave gives well-timed power-ups a chance to reduce the rider count. Rider departures, props, pickup collisions, and timed encounters update in the 20 Hz simulation.
 
 [The MTA 4 train schedule](https://www.mta.info/schedules/subway/4-train) supplies the route. See [audio credits](AUDIO.md) for field recordings and edits.
 
