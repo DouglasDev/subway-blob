@@ -17,7 +17,7 @@ export const ENCOUNTERS = {
   smoker: { name: 'Weed smoke', stops: 1 },
   ac: { name: 'AC out · +25% volume', stops: 1 },
   takes: { name: 'SubwayTakes', stops: 2 },
-  speaker: { name: 'Loudspeaker', stops: 1 },
+  speaker: { name: 'Annoying Announcement', stops: 1 },
   soda: { name: 'Sticky soda spill', stops: 1 },
   spreader: { name: 'Manspreader', stops: 1 },
   shover: { name: 'Shoving rider', stops: 1 },
@@ -37,7 +37,8 @@ export type Cue =
   | 'brakeJolt'
   | 'shove'
   | 'murmur'
-  | 'rhino';
+  | 'rhino'
+  | 'omnyLand';
 
 export function hasGuest(kind: Encounter) {
   return kind !== 'ac' && kind !== 'speaker' && kind !== 'soda';

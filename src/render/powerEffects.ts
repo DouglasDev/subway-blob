@@ -2,13 +2,12 @@ import * as T from 'three';
 import type { Power } from '../sim/powers.ts';
 import type { Ride } from '../sim/ride.ts';
 
-const palettes: Record<Exclude<Power, 'shield'>, number[]> = {
+const palettes: Record<Exclude<Power, 'shield' | 'omny'>, number[]> = {
   crazy: [0xff75da, 0x69ebff, 0xffe478, 0xa177ff, 0xe0ffa2],
   fart: [0xa6d941, 0xced74b, 0x7eb746, 0xe4ed76, 0x76ba86],
   cool: [0x76ecff, 0xd8ffff, 0x7dcdff, 0xa7eadf, 0xffffff],
   fluid: [0x6effdc, 0xb6fff1, 0x61d4a9, 0xcffffe, 0x9bfbcd],
   annoy: [0xff834e, 0xffdb62, 0xf15b4d, 0xff9c73, 0xffef9e],
-  candy: [0xff76b3, 0xffc26d, 0xddabff, 0x93ebd2, 0xfff19a],
   express: [0xffcf58, 0xffe694, 0xffa858, 0xffffaf, 0xfff8d2],
   vomit: [0x96f032, 0xd5fb5a, 0x54d04d, 0xe9f977, 0x8bd931],
 };
@@ -91,10 +90,12 @@ export function buildPowerEffects(scene: T.Object3D) {
     group.visible =
       !!animation &&
       animation.cue !== 'shield' &&
+      animation.cue !== 'omny' &&
       time < animation.until &&
       ride.phase !== 'popped';
 
-    if (!group.visible || !animation || animation.cue === 'shield') return;
+    if (!group.visible || !animation || animation.cue === 'shield' || animation.cue === 'omny')
+      return;
 
     const age = time - animation.began;
     const mode = animation.cue;

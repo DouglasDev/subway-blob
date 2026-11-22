@@ -12,7 +12,7 @@ import {
 } from './encounters.ts';
 import type { Cue, Encounter } from './encounters.ts';
 import {
-  RHINO_PRANK,
+  PA_FEEDBACK_SECONDS,
   SHOVE_DURATION,
   SHOVE_RANGE,
   SODA_DRAIN,
@@ -24,8 +24,9 @@ import {
 import { Fluid } from './fluid.ts';
 import { guestContent } from './guestContent.ts';
 import {
-  candyLocation,
-  CANDY_SECONDS,
+  omnyLocation,
+  OMNY_FLIGHT,
+  OMNY_SECONDS,
   COOL_POINTS,
   crowdPressure,
   DOUBLE_PICKUP_STOP,
@@ -68,7 +69,15 @@ export class Ride {
   readonly schedule: Map<number, Encounter>;
   readonly cues: Cue[] = [];
   pickups: Pickup[] = [];
-  candy: (Location & { until: number }) | null = null;
+  omny:
+    | (Location & {
+        origin: Location;
+        began: number;
+        landsAt: number;
+        until: number;
+        landed: boolean;
+      })
+    | null = null;
   encounter: {
     kind: Encounter;
     expires: number;
@@ -102,7 +111,7 @@ export class Ride {
   shove: { x: number; z: number; at: number } | null = null;
   private nextTrackJolt = Infinity;
   private nextMurmur = 5;
-  private nextRhinoBump = 0;
+  rhinoImpactAt = -Infinity;
   private readonly ambience: () => number;
   private rawSqueeze = 0;
   private readonly random: () => number;
@@ -175,7 +184,7 @@ export class Ride {
         const age = this.time - encounter.began - REACTION_DELAY;
         const distance = Math.abs(this.fluid.x - encounter.location.x);
 
-        if (age >= 0 && age < 3.2)
+        if (age >= 0 && age < PA_FEEDBACK_SECONDS)
           this.guestPressure = 0.27 + Math.max(0, 1 - distance / 3.4) * 0.44;
       }
 
@@ -272,6 +281,7 @@ export class Ride {
     this.phaseTime += STEP;
     this.moveTrain();
     this.activatePowers();
+    this.landOmny();
     const encounter = this.encounter;
     const soda = encounter?.kind === 'soda' ? encounter.location : undefined;
 
@@ -337,16 +347,6 @@ export class Ride {
     }
 
     if (
-      encounter?.kind === 'prank' &&
-      encounter.variant === RHINO_PRANK &&
-      this.act &&
-      this.time >= this.nextRhinoBump
-    ) {
-      this.nextRhinoBump = this.time + 2.3;
-      this.cues.push('rhino');
-    }
-
-    if (
       this.phase === 'doors' &&
       this.phaseTime >= DWELL &&
       (!this.crowd.hasTraffic || this.phaseTime >= DWELL + 2.65)
@@ -389,7 +389,7 @@ export class Ride {
 
     this.crowd.tryPush(this.fluid, dx, dz, grid, fixtures);
 
-    this.crowd.update(
+    const bumped = this.crowd.update(
       STEP,
       this.time,
       this.fluid,
@@ -444,6 +444,17 @@ export class Ride {
       this.rawSqueeze = 1;
     }
 
+    if (
+      this.time - this.rhinoImpactAt >= 0.38 &&
+      bumped.length &&
+      this.crowd.riders.some(
+        (rider) => bumped.includes(rider.id) && (rider.rhinoRecoilUntil ?? 0) > this.time,
+      )
+    ) {
+      this.rhinoImpactAt = this.time;
+      this.cues.push('rhino');
+    }
+
     this.crowd.commitDepartures();
   }
 
@@ -469,15 +480,31 @@ export class Ride {
       else if (power === 'shield') this.shieldUntil = this.time + QUIET_SECONDS;
       else if (power === 'fluid') this.fluidUntil = this.time + SUPER_FLUID_SECONDS;
       else if (power === 'express') this.expressUntil = this.time + EXPRESS_SECONDS;
-      else {
-        if (power === 'candy')
-          this.candy = { ...candyLocation(this.fluid.x), until: this.time + CANDY_SECONDS };
+      else if (power === 'omny') {
+        const landsAt = this.time + OMNY_FLIGHT;
 
-        this.crowd.react(power, this.fluid, this.time, this.phase === 'doors', this.facing);
-      }
+        this.omny = {
+          ...omnyLocation(this.fluid.x),
+          origin: { x: this.fluid.x, z: this.fluid.z },
+          began: this.time,
+          landsAt,
+          until: landsAt + OMNY_SECONDS,
+          landed: false,
+        };
+      } else this.crowd.react(power, this.fluid, this.time, this.phase === 'doors', this.facing);
     }
 
     this.actions.clear();
+  }
+
+  private landOmny() {
+    const toss = this.omny;
+
+    if (!toss || toss.landed || this.time + 1e-9 < toss.landsAt) return;
+
+    toss.landed = true;
+    this.crowd.react('omny', toss.origin, this.time, this.phase === 'doors');
+    this.cues.push('omnyLand');
   }
 
   private updatePickup() {

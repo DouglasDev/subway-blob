@@ -1,6 +1,6 @@
 import * as T from 'three';
 import type { Ride } from '../sim/ride.ts';
-import { SODA_RADIUS } from '../sim/hazards.ts';
+import { PA_FEEDBACK_SECONDS, SODA_RADIUS } from '../sim/hazards.ts';
 
 function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
   const mesh = new T.Mesh(geometry, new T.MeshStandardMaterial({ color, roughness: 0.52 }));
@@ -99,12 +99,13 @@ export function buildHazards(car: T.Object3D) {
       speaker.position.set(location.x, 1.96, location.z);
       const age = ride.time - event.began - 2;
 
-      light.material.emissiveIntensity = age >= 0 && age < 3.2 ? 1.1 + Math.sin(age * 26) : 0.12;
+      light.material.emissiveIntensity =
+        age >= 0 && age < PA_FEEDBACK_SECONDS ? 1.1 + Math.sin(age * 26) : 0.12;
 
       for (const [index, ring] of soundRings.entries()) {
         const progress = (age * 1.58 - index / 3 + 1) % 1;
 
-        ring.visible = age >= 0 && age < 3.2;
+        ring.visible = age >= 0 && age < PA_FEEDBACK_SECONDS;
         ring.scale.setScalar(0.16 + progress * 0.74);
         ring.position.set(0, -progress * 0.19, 0.15 + progress * 0.38);
         ring.material.opacity = (1 - progress) * 0.62;

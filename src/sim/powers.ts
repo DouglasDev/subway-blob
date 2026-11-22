@@ -5,7 +5,7 @@ const catalog = {
   fart: { name: 'Stink Bomb', color: 0xdeed65, weight: 3 },
   vomit: { name: 'Slime Spray', color: 0x8bf45d, weight: 3 },
   annoy: { name: 'Annoying Alarm', color: 0xff8a55, weight: 2 },
-  candy: { name: 'Sell Candy', color: 0xff81ae, weight: 2 },
+  omny: { name: 'OMNY Card Toss', color: 0x83ddfa, weight: 2 },
   cool: { name: 'Cool Pack', color: 0x8de8ff, weight: 2 },
   shield: { name: 'Quiet Bubble', color: 0x70a8ff, weight: 1 },
   express: { name: 'Speed Boost', color: 0xffdc73, weight: 2 },
@@ -24,9 +24,11 @@ export const EXPRESS_SECONDS = 10;
 
 export const SUPER_FLUID_SECONDS = 10;
 
-export const CANDY_SECONDS = 10;
+export const OMNY_SECONDS = 10;
 
-export function candyLocation(x: number) {
+export const OMNY_FLIGHT = 0.75;
+
+export function omnyLocation(x: number) {
   return { x: x + (x < 0 ? 2.19 : -2.19), z: -0.09 };
 }
 

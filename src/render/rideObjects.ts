@@ -1,7 +1,7 @@
 import * as T from 'three';
 import type { Ride } from '../sim/ride.ts';
 import { POWERS } from '../sim/powers.ts';
-import { wrappedCandy } from './candy';
+import { omnyCardFactory } from './omnyCard';
 import { riderFacing, riderSize } from './riders';
 import { buildGags, buildInstruments } from './gags';
 
@@ -14,32 +14,28 @@ function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
 }
 
 export function buildRideObjects(scene: T.Object3D) {
+  const makeCard = omnyCardFactory();
   const tokens = Array.from({ length: 2 }, () => {
     const token = new T.Group();
     const jewel = part(token, new T.IcosahedronGeometry(0.13, 0), 0xffd061);
     const halo = part(token, new T.TorusGeometry(0.16, 0.016, 6, 16), 0xfffac0);
-    const sweet = wrappedCandy(0xff4d8f, 0xffc1de);
+    const card = makeCard();
 
-    sweet.scale.setScalar(0.78);
-    token.add(sweet);
+    card.scale.setScalar(0.78);
+    token.add(card);
     const beacon = part(token, new T.CircleGeometry(0.24, 16), 0xd79849);
 
     beacon.rotation.x = -Math.PI / 2;
     beacon.position.y = 0.014;
     scene.add(token);
 
-    return { token, jewel, halo, beacon, sweet };
+    return { token, jewel, halo, beacon, card };
   });
 
-  const candyDisplay = new T.Group();
-  const sweets = [
-    wrappedCandy(0xff397c, 0xffa6d6),
-    wrappedCandy(0x47e5d6, 0xbaffed),
-    wrappedCandy(0xd685ff, 0xffe4a0),
-  ];
+  const thrownCard = makeCard();
 
-  candyDisplay.add(...sweets);
-  scene.add(candyDisplay);
+  thrownCard.visible = false;
+  scene.add(thrownCard);
 
   const luggage = new Map<number, T.Group>();
   const stageMark = part(scene, new T.RingGeometry(0.44, 0.5, 20), 0xffc963);
@@ -96,30 +92,31 @@ export function buildRideObjects(scene: T.Object3D) {
     const { pickups, time } = ride;
     const actor = ride.act;
 
-    const candy = ride.candy;
+    const toss = ride.omny;
 
-    candyDisplay.visible = !!candy && candy.until > time && ride.phase !== 'popped';
+    thrownCard.visible = !!toss && time < toss.until && ride.phase !== 'popped';
 
-    if (candy && candyDisplay.visible) {
-      candyDisplay.position.set(candy.x, 1.48, candy.z);
-      const life = Math.min(1, (candy.until - time) * 4);
+    if (toss && thrownCard.visible) {
+      const travel = T.MathUtils.clamp((time - toss.began) / (toss.landsAt - toss.began), 0, 1);
+      const heading = Math.atan2(toss.x - toss.origin.x, toss.z - toss.origin.z);
+      const arc = Math.sin(Math.PI * travel);
+      const landing = Math.max(0, time - toss.landsAt);
+      const bounce = Math.max(0, 1 - landing * 5) * Math.abs(Math.sin(landing * 22)) * 0.065;
 
-      candyDisplay.scale.setScalar(life);
+      thrownCard.position.set(
+        T.MathUtils.lerp(toss.origin.x, toss.x, travel),
+        T.MathUtils.lerp(1.02, 0.026, travel) + arc * 1.31 + bounce,
+        T.MathUtils.lerp(toss.origin.z, toss.z, travel),
+      );
 
-      for (const [index, sweet] of sweets.entries()) {
-        const angle = time * 1.65 + (index * 2 * Math.PI) / sweets.length;
-
-        sweet.position.set(
-          Math.cos(angle) * 0.38,
-          Math.sin(angle * 2) * 0.18,
-          Math.sin(angle) * 0.38,
-        );
-
-        sweet.rotation.set(0.19, -angle, 0.22 * Math.sin(angle));
-      }
+      thrownCard.rotation.set(
+        -Math.PI / 2 + arc * Math.cos(travel * Math.PI * 5) * 1.55,
+        arc * 0.3,
+        heading + travel * Math.PI * 4,
+      );
     }
 
-    for (const [index, { token, jewel, halo, beacon, sweet }] of tokens.entries()) {
+    for (const [index, { token, jewel, halo, beacon, card }] of tokens.entries()) {
       const pickup = pickups[index];
 
       token.visible = !!pickup;
@@ -129,10 +126,10 @@ export function buildRideObjects(scene: T.Object3D) {
       token.position.set(pickup.x, 0, pickup.z);
       jewel.position.y = pickup.y + Math.sin(time * 6 + index) * 0.055;
       jewel.rotation.set(time, index + time * 2.4, 0.2);
-      jewel.visible = pickup.power !== 'candy';
-      sweet.visible = !jewel.visible;
-      sweet.position.copy(jewel.position);
-      sweet.rotation.set(0.22, time * 2.4, 0.19);
+      jewel.visible = pickup.power !== 'omny';
+      card.visible = !jewel.visible;
+      card.position.copy(jewel.position);
+      card.rotation.set(-0.17, time * 2.4, 0.19);
       const color = POWERS[pickup.power].color;
 
       (jewel.material as T.MeshStandardMaterial).color.setHex(color);
@@ -176,6 +173,7 @@ export function buildRideObjects(scene: T.Object3D) {
       elapsed,
       actor ? riderFacing(actor) : 0,
       actor ? riderSize(actor.id) : 1,
+      Math.max(0, 1 - (time - ride.rhinoImpactAt) * 4),
     );
 
     updateInstruments(act === 'musician' ? variant : undefined, actor?.x, actor?.z, elapsed);

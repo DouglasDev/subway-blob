@@ -513,10 +513,10 @@ export function App() {
                   {graphicsError
                     ? 'Enable WebGL in your browser to play.'
                     : result
-                      ? `${STATIONS[stationIndex(hud.stop)]} · ${hud.score} ${hud.score === 1 ? 'stop' : 'stops'} survived`
+                      ? `Survived ${hud.score} ${hud.score === 1 ? 'stop' : 'stops'} · ${STATIONS[stationIndex(hud.stop)]}`
                       : arcadeMode
-                        ? 'Find a gap. Grab a power-up. Pop at 100%.'
-                        : 'You’re the gap filler. Slip between riders, grab power-ups, and stay below 100% Squished.'}
+                        ? 'Miserable blob from track grime. Dodge the crowd before you get squished.'
+                        : 'You’re a miserable blob formed from subway-track grime. Slip through the crowd and grab power-ups to avoid getting squished.'}
                 </Prompt>
                 {!touchLayout && startButton}
               </Card>

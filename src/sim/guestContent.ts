@@ -1,3 +1,4 @@
+import { RHINO_PRANK } from './hazards.ts';
 import { shuffle } from './encounters.ts';
 
 export const TAKES = [
@@ -191,6 +192,13 @@ export function guestContent(random: () => number) {
   function variant(kind: Variety) {
     if (bags[kind].length === 0) {
       const deck = shuffle([...sequences[kind]], random);
+
+      if (kind === 'prank' && previous[kind] === undefined) {
+        const rhino = deck.indexOf(RHINO_PRANK);
+
+        deck.push(deck.splice(rhino, 1)[0]);
+      }
+
       const last = deck.length - 1;
 
       if (deck[last] === previous[kind]) [deck[0], deck[last]] = [deck[last], deck[0]];

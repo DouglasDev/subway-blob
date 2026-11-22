@@ -1,6 +1,7 @@
 import {
-  CANDY_SECONDS,
-  candyLocation,
+  OMNY_FLIGHT,
+  OMNY_SECONDS,
+  omnyLocation,
   EXPRESS_SECONDS,
   crowdPressure,
   DOUBLE_PICKUP_STOP,
@@ -25,7 +26,7 @@ import {
 import type { Encounter } from '../src/sim/encounters.ts';
 import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
 import { Fluid } from '../src/sim/fluid.ts';
-import { SPREADER_X, SPREADER_Z, sprayHits } from '../src/sim/hazards.ts';
+import { RHINO_PRANK, SPREADER_X, SPREADER_Z, sprayHits } from '../src/sim/hazards.ts';
 import { Grid } from '../src/sim/grid.ts';
 import { HOT_VOLUME, QUIET_SECONDS, Ride, STANDARD_VOLUME, STEP } from '../src/sim/ride.ts';
 
@@ -363,6 +364,8 @@ test('moves, songs, and pranks use every variant before repeating', () => {
     const length = kind === 'prank' ? PRANKS.length : 5;
     const first = Array.from({ length }, () => content.variant(kind));
 
+    if (kind === 'prank') assert.equal(first[0], RHINO_PRANK);
+
     assert.equal(new Set(first).size, length);
     assert.notEqual(content.variant(kind), first.at(-1));
   }
@@ -610,22 +613,41 @@ test('blob body and eyes finish a turn and keep facing the last direction at res
   assert.equal(ride.facing, facing);
 });
 
-test('candy stays at the attraction point and Speed Boost expires after ten seconds', () => {
+test('an OMNY toss attracts riders and taps on landing while Speed Boost ticks independently', () => {
   const ride = new Ride();
 
   ride.start();
-  const location = candyLocation(ride.fluid.x);
+  const origin = { x: ride.fluid.x, z: ride.fluid.z };
+  const location = omnyLocation(origin.x);
 
-  ride.inventory[0] = 'candy';
+  ride.inventory[0] = 'omny';
   ride.inventory[1] = 'express';
   ride.usePower(0);
   ride.usePower(1);
   ride.tick({ x: 1, z: 0 });
 
-  assert.deepEqual(ride.candy, { ...location, until: ride.time + CANDY_SECONDS });
+  assert.deepEqual(ride.omny, {
+    ...location,
+    origin,
+    began: STEP,
+    landsAt: STEP + OMNY_FLIGHT,
+    until: STEP + OMNY_FLIGHT + OMNY_SECONDS,
+    landed: false,
+  });
+
   assert.equal(ride.expressUntil, ride.time + EXPRESS_SECONDS);
+  assert.ok(ride.cues.includes('omny'));
+  assert.ok(!ride.cues.includes('omnyLand'));
+
+  for (let i = 0; i < Math.round(OMNY_FLIGHT / STEP) - 1; i++) ride.tick({ x: 0, z: 0 });
+
+  assert.ok(!ride.omny?.landed);
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(ride.omny?.landed, true);
+  assert.equal(ride.omny?.x, location.x);
+  assert.equal(ride.cues.filter((cue) => cue === 'omnyLand').length, 1);
   ride.tick({ x: -1, z: 0 });
-  assert.deepEqual(ride.candy, { ...location, until: STEP + CANDY_SECONDS });
+  assert.equal(ride.cues.filter((cue) => cue === 'omnyLand').length, 1);
 });
 
 test('each encounter cues one rider reaction two seconds after it starts in the car', () => {
@@ -819,4 +841,38 @@ test('seeded guest and pickup spawn locations cover multiple zones in the car', 
 
   assert.ok(guestZones.size >= 5);
   assert.ok(pickupZones.size >= 7);
+});
+
+test('the rhino shunts nearby riders and only sounds on contact', () => {
+  const ride = new Ride();
+  const [rhino, close, far] = ride.crowd.riders;
+
+  ride.crowd.riders = [rhino, close, far];
+  ride.schedule.clear();
+  ride.start();
+  ride.encounter = { kind: 'prank', expires: 1, began: 0, variant: RHINO_PRANK, dialogueAt: 0 };
+
+  Object.assign(rhino, {
+    x: 2.55,
+    z: 0.16,
+    role: 'prank',
+    slot: { ...rhino.slot, x: 2.55, z: 0.16 },
+  });
+
+  Object.assign(close, { x: 3.55, z: 0.16, slot: { ...close.slot, x: 3.55, z: 0.16 } });
+  Object.assign(far, { x: -3.1, z: 0.62, slot: { ...far.slot, x: -3.1, z: 0.62 } });
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(!ride.cues.includes('rhino'));
+
+  close.x = 2.9;
+  const before = close.x;
+
+  ride.tick({ x: 0, z: 0 });
+  assert.ok(close.x > before);
+  assert.ok(!far.rhinoRecoilUntil);
+  assert.equal(ride.cues.filter((cue) => cue === 'rhino').length, 1);
+  for (let i = 0; i < 4; i++) ride.tick({ x: 0, z: 0 });
+
+  assert.equal(ride.cues.filter((cue) => cue === 'rhino').length, 1);
+  assertVolume(ride.fluid, ride.mask);
 });

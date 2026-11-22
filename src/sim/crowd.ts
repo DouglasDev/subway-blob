@@ -3,7 +3,7 @@ import { Grid } from './grid.ts';
 import { RHINO_PRANK, SPREADER_X, SPREADER_Z, sprayHits } from './hazards.ts';
 import { hasGuest, seededRandom } from './encounters.ts';
 import type { Encounter } from './encounters.ts';
-import { candyLocation, CANDY_SECONDS } from './powers.ts';
+import { omnyLocation, OMNY_SECONDS } from './powers.ts';
 import type { Power } from './powers.ts';
 
 export type Location = { x: number; z: number };
@@ -18,6 +18,7 @@ export type Rider = Location & {
   trajectory?: { points: Location[]; delay: number; span: number; age: number; exits: boolean };
   role?: Encounter;
   wantsExit?: boolean;
+  rhinoRecoilUntil?: number;
   prop?: Location & { kind: 'suitcase' | 'bike'; pushed?: boolean };
   away?: Location & { until: number };
 };
@@ -173,9 +174,9 @@ export class Crowd {
     doors: boolean,
     facing = 0,
   ) {
-    const radius = { crazy: 2.35, fart: 2, vomit: 1.95, annoy: 2.6, candy: 2.65 }[power];
-    const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, candy: 0 }[power];
-    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: CANDY_SECONDS }[power];
+    const radius = { crazy: 2.35, fart: 2, vomit: 1.95, annoy: 2.6, omny: 2.65 }[power];
+    const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, omny: 0 }[power];
+    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, omny: OMNY_SECONDS }[power];
 
     const distance = (rider: Rider) => Math.hypot(rider.x - from.x, rider.z - from.z);
 
@@ -189,8 +190,8 @@ export class Crowd {
           (power !== 'vomit' || sprayHits(rider.x - from.x, rider.z - from.z, facing)),
       )
       .sort((a, b) => distance(a) - distance(b));
-    const candy = candyLocation(from.x);
-    const candyEnd = from.x < 0 ? 1 : -1;
+    const omny = omnyLocation(from.x);
+    const omnyEnd = from.x < 0 ? 1 : -1;
 
     for (const [index, rider] of nearby.entries()) {
       if (index < exits) {
@@ -202,10 +203,10 @@ export class Crowd {
       if (power === 'crazy' && !rider.wantsExit) continue;
 
       rider.away =
-        power === 'candy'
+        power === 'omny'
           ? {
-              x: candy.x + candyEnd * ((index % 4) - 1.5) * 0.26,
-              z: candy.z + ((index % 3) - 1) * 0.39,
+              x: omny.x + omnyEnd * ((index % 4) - 1.5) * 0.26,
+              z: omny.z + ((index % 3) - 1) * 0.39,
               until: time + duration,
             }
           : {
@@ -273,18 +274,34 @@ export class Crowd {
       performer.z > -1.02 &&
       (performer.role === 'acrobat' || performer.role === 'musician' || performer.role === 'prank');
 
-    if (performance && performer.role === 'prank' && prankVariant === RHINO_PRANK) {
+    const charging =
+      performance &&
+      performer.role === 'prank' &&
+      prankVariant === RHINO_PRANK &&
+      !performer.trajectory;
+    const bumped: number[] = [];
+
+    if (charging) {
       for (const rider of this.riders) {
         const dx = rider.x - performer.x;
         const dz = rider.z - performer.z;
+        const distance = Math.hypot(dx, dz);
 
-        if (rider.role || rider.trajectory || Math.hypot(dx, dz) > 0.58) continue;
+        if (
+          rider.role ||
+          rider.trajectory ||
+          rider.wantsExit ||
+          distance > 0.64 ||
+          (rider.rhinoRecoilUntil ?? 0) > time
+        )
+          continue;
 
-        rider.away = {
-          x: rider.x + (Math.sign(dx) || 1) * 0.68,
-          z: rider.z - 0.36,
-          until: time + 0.65,
-        };
+        const x = distance > 0.05 ? dx / distance : Math.sin(performer.heading);
+        const z = distance > 0.05 ? dz / distance : -0.55;
+
+        rider.rhinoRecoilUntil = time + 0.78;
+        rider.away = { x: rider.x + x * 0.97, z: rider.z + z * 0.67, until: time + 0.62 };
+        bumped.push(rider.id);
       }
     }
 
@@ -308,7 +325,10 @@ export class Crowd {
             };
           else target = rider;
         } else if (rider === performer && rider.role === 'prank' && prankVariant === RHINO_PRANK) {
-          target = { x: rider.slot.x + Math.sin(time * 2.8) * 1.42, z: 0.42 };
+          target = {
+            x: rider.slot.x + Math.sin(time * 2.8) * 1.55,
+            z: rider.slot.z + Math.sin(time * 4.3) * 0.22,
+          };
         } else if (prop?.pushed) {
           target = { x: prop.x - (prop.kind === 'bike' ? 0.53 : 0.31), z: prop.z };
         } else if (performance && !rider.role && Math.abs(rider.slot.x - performer.x) < 2.3) {
@@ -320,7 +340,17 @@ export class Crowd {
           };
         }
 
-        this.walkToward(rider, target, dt, time, grid, fixtures);
+        const recoiling = (rider.rhinoRecoilUntil ?? 0) > time;
+
+        this.walkToward(
+          rider,
+          target,
+          dt,
+          time,
+          grid,
+          fixtures,
+          charging && rider === performer ? 2.05 : recoiling ? 1.82 : 1.05,
+        );
 
         if (prop?.pushed && Math.hypot(rider.x - target.x, rider.z - target.z) < 0.075) {
           rider.slot = { ...rider.slot, x: rider.x, z: rider.z };
@@ -332,6 +362,8 @@ export class Crowd {
         prop.z = rider.z;
       }
     }
+
+    return bumped;
   }
 
   commitDepartures() {
@@ -417,6 +449,7 @@ export class Crowd {
     time: number,
     grid: Grid,
     fixtures: Uint8Array,
+    speed: number,
   ) {
     const dx = target.x - rider.x;
     const dz = target.z - rider.z;
@@ -426,7 +459,7 @@ export class Crowd {
 
     if (distance < 0.015) return;
 
-    const scale = Math.min(1, (dt * 1.05) / distance);
+    const scale = Math.min(1, (dt * speed) / distance);
     const x = Math.max(-4.53, Math.min(4.53, rider.x + dx * scale));
     const z = Math.max(-1, Math.min(1, rider.z + dz * scale));
 

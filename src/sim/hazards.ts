@@ -1,3 +1,5 @@
+export const PA_FEEDBACK_SECONDS = 4.15;
+
 export const SODA_RADIUS = 0.87;
 
 export const SODA_SPEED = 0.46;

@@ -71,7 +71,7 @@ export function buildGags(scene: T.Object3D) {
   });
   const rhino = new T.Group();
 
-  shape(rhino, new T.SphereGeometry(0.28, 12, 9), 0x767f8a, 0, 1.47, 0.015);
+  shape(rhino, new T.SphereGeometry(0.28, 12, 9), 0x8797a8, 0, 1.47, 0.015);
 
   shape(rhino, new T.SphereGeometry(0.2, 10, 8), 0x929eaa, 0, 1.38, 0.22).scale.set(
     0.94,
@@ -79,7 +79,7 @@ export function buildGags(scene: T.Object3D) {
     1.12,
   );
 
-  shape(rhino, new T.BoxGeometry(0.44, 0.52, 0.33), 0x747e89, 0, 1.04, 0.022);
+  shape(rhino, new T.BoxGeometry(0.44, 0.52, 0.33), 0x8393a4, 0, 1.04, 0.022);
   const horn = shape(rhino, new T.ConeGeometry(0.088, 0.33, 11), 0xf0e1bb, 0, 1.53, 0.36);
 
   horn.rotation.x = 0.6;
@@ -98,7 +98,7 @@ export function buildGags(scene: T.Object3D) {
 
   scene.add(...gags);
 
-  return (variant: number | undefined, x = 0, z = 0, time = 0, heading = 0, size = 1) => {
+  return (variant: number | undefined, x = 0, z = 0, time = 0, heading = 0, size = 1, bump = 0) => {
     for (const [index, gag] of gags.entries()) gag.visible = index === variant;
     caseLid.visible = variant === 0 || variant === 3 || variant === 4;
 
@@ -161,7 +161,8 @@ export function buildGags(scene: T.Object3D) {
       case RHINO_PRANK:
         rhino.position.set(x, Math.abs(Math.sin(time * 12)) * 0.035, z);
         rhino.rotation.y = heading;
-        rhino.scale.setScalar(size);
+        rhino.rotation.x = bump * 0.19;
+        rhino.scale.setScalar(size * (1 + bump * 0.1));
         break;
       case 4:
         stampede.position.set(x, 0.06, z + 0.45);

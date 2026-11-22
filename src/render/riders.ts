@@ -43,8 +43,17 @@ export function buildRiders(scene: T.Object3D) {
   const meshes = [head, hair, arms, legs, shoes, hems, bags, ...torso];
   const person = new T.Object3D();
   const marker = new T.Object3D();
+  const joint = new T.Object3D();
+  const jointMatrix = new T.Matrix4();
   const matrix = new T.Matrix4();
   const color = new T.Color();
+
+  function hinge(x: number, y: number, z: number, angle: number) {
+    joint.position.set(x, y, z);
+    joint.rotation.x = angle;
+    joint.updateMatrix();
+    jointMatrix.multiplyMatrices(person.matrix, joint.matrix);
+  }
 
   function stamp(
     mesh: T.InstancedMesh,
@@ -57,12 +66,13 @@ export function buildRiders(scene: T.Object3D) {
     sy: number,
     sz: number,
     swing = 0,
+    parent = person.matrix,
   ) {
     marker.position.set(x, y, z);
     marker.rotation.x = swing;
     marker.scale.set(sx, sy, sz);
     marker.updateMatrix();
-    mesh.setMatrixAt(index, matrix.multiplyMatrices(person.matrix, marker.matrix));
+    mesh.setMatrixAt(index, matrix.multiplyMatrices(parent, marker.matrix));
     mesh.setColorAt(index, color.setHex(tint));
   }
 
@@ -88,9 +98,11 @@ export function buildRiders(scene: T.Object3D) {
       const skirt = !seated && style.cut >= 6;
       const long = style.cut % 2 === 0;
       const shorts = style.cut === 5;
-      const swing = stride ? Math.sin(stride) * 0.47 : 0;
+      const swing = stride ? Math.sin(stride) * 0.36 : 0;
+      const hipY = 0.84;
+      const soleLow = hipY - 0.8365 * Math.cos(swing) - 0.17 * Math.abs(Math.sin(swing));
 
-      person.position.set(x, Math.abs(swing) * 0.06, z);
+      person.position.set(x, stride ? (0.0035 - soleLow) * size : 0, z);
       person.rotation.y = riderFacing(rider);
       person.rotation.x = 0;
       person.rotation.z = 0;
@@ -170,7 +182,6 @@ export function buildRiders(scene: T.Object3D) {
         const limb = index * 2 + sideIndex;
         const foot = limb * 2;
         const legX = sign * 0.101;
-        const footZ = 0.045 - sign * swing * 0.33;
         const angle = sign * swing;
         const cuff = style.cut % 3 === 0 ? 0.159 : 0.119;
 
@@ -184,49 +195,56 @@ export function buildRiders(scene: T.Object3D) {
           continue;
         }
 
-        stamp(
-          arms,
-          limb,
-          jacket,
-          sign * 0.231,
-          1.04 + pushing * 0.15,
-          -sign * swing * 0.1 + pushing * 0.25,
-          0.092,
-          0.51,
-          0.11,
-          -angle - pushing * 1.4,
-        );
+        hinge(sign * 0.202, 1.315, 0.006, -angle * 0.8 - pushing * 1.4);
+        stamp(arms, limb, jacket, 0, -0.255, 0, 0.092, 0.51, 0.11, 0, jointMatrix);
+
+        hinge(legX, hipY, 0, angle);
 
         stamp(
           legs,
           legCount++,
           skirt || shorts ? skin : style.bottom,
-          legX,
-          0.4,
-          sign * swing * 0.13,
+          0,
+          -0.385,
+          0,
           skirt || shorts ? 0.103 : cuff,
           0.77,
           0.144,
-          angle,
+          0,
+          jointMatrix,
         );
 
         if (shorts) {
-          stamp(
-            legs,
-            legCount++,
-            style.bottom,
-            legX,
-            0.66,
-            sign * swing * 0.08,
-            0.153,
-            0.3,
-            0.17,
-            angle,
-          );
+          stamp(legs, legCount++, style.bottom, 0, -0.15, 0, 0.153, 0.3, 0.17, 0, jointMatrix);
         }
 
-        stamp(shoes, foot, style.sneaker, legX, 0.077, footZ, 0.146, 0.105, 0.231, angle);
-        stamp(shoes, foot + 1, 0xe5e0d3, legX, 0.023, footZ + 0.004, 0.153, 0.039, 0.242, angle);
+        stamp(
+          shoes,
+          foot,
+          style.sneaker,
+          0,
+          0.077 - hipY,
+          0.045,
+          0.146,
+          0.105,
+          0.231,
+          0,
+          jointMatrix,
+        );
+
+        stamp(
+          shoes,
+          foot + 1,
+          0xe5e0d3,
+          0,
+          0.023 - hipY,
+          0.049,
+          0.153,
+          0.039,
+          0.242,
+          0,
+          jointMatrix,
+        );
       }
     }
 
