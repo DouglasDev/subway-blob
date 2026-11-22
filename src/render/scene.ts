@@ -6,6 +6,7 @@ import { buildRiders } from './riders';
 import { buildRideObjects } from './rideObjects';
 import { buildPowerEffects } from './powerEffects';
 import { buildHazards } from './hazards';
+import { brakingLurch } from '../sim/trainMotion.ts';
 import { buildSmoke } from './smoke';
 
 export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = false) {
@@ -33,12 +34,9 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   fill.position.set(2, 2, 6);
   scene.add(fill);
 
-  const camera = new T.PerspectiveCamera(
-    !arcade && canvas.dataset.touch === 'true' ? 43 : 48,
-    1,
-    0.1,
-    55,
-  );
+  const fieldOfView = () => (arcade ? 37 : canvas.dataset.touch === 'true' ? 43 : 48);
+
+  const camera = new T.PerspectiveCamera(fieldOfView(), 1, 0.1, 55);
   const focus = new T.Vector3(0, 0.78, -0.29);
   const goal = new T.Vector3();
   const car = new T.Group();
@@ -88,6 +86,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   let lastPhase = '';
   let aspect = 1;
   let cameraLift = 0;
+  let pulsePhase = 0;
 
   const resize = new ResizeObserver(() => {
     const { clientWidth, clientHeight } = canvas;
@@ -113,7 +112,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
   return {
     draw(dt: number) {
-      const fov = !arcade && canvas.dataset.touch === 'true' ? 43 : 48;
+      const fov = fieldOfView();
 
       if (camera.fov !== fov) {
         camera.fov = fov;
@@ -123,12 +122,19 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       const popped = ride.phase === 'popped';
 
       const joltAge = ride.jolt ? ride.time - ride.jolt.at : Infinity;
+      const braking = ride.jolt?.braking;
       const jolt =
         ride.jolt && joltAge < 0.56
-          ? ride.jolt.strength * Math.sin(joltAge * 25) * Math.exp(-joltAge * 7.5)
+          ? ride.jolt.strength *
+            (braking ? brakingLurch(joltAge) : Math.sin(joltAge * 25) * Math.exp(-joltAge * 7.5))
           : 0;
 
-      car.position.set(jolt * 0.24, Math.abs(jolt) * 0.065, -jolt * 0.066);
+      car.position.set(
+        jolt * (braking ? 0.35 : 0.24),
+        braking ? 0 : Math.abs(jolt) * 0.065,
+        braking ? 0 : -jolt * 0.066,
+      );
+
       car.rotation.z = -jolt * 0.028;
 
       if (lastTick !== ride.time || lastPhase !== ride.phase) {
@@ -151,6 +157,9 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
           shove && shover
             ? { id: shover.id, age: ride.time - shove.at, heading: Math.atan2(shove.x, shove.z) }
             : undefined,
+          ride.act?.role === 'sneezy' && ride.sneeze
+            ? { id: ride.act.id, age: ride.time - ride.sneeze.at }
+            : undefined,
         );
 
         updateObjects(ride);
@@ -165,7 +174,13 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       updateTrack(ride.stop, ride.renderTravel, inTunnel, ride.time);
       const crazy = ride.animation?.cue === 'crazy' && ride.time < ride.animation.until;
 
-      const heat = Math.max(1 - ride.tolerance, ride.squeeze, ride.guestPressure * 0.52);
+      const squished = 1 - ride.tolerance;
+      const heat = Math.max(squished, ride.squeeze, Math.min(1, ride.guestPressure * 0.52));
+
+      pulsePhase =
+        (pulsePhase + dt * Math.PI * 2 * (0.22 + 2.55 * squished ** 1.6)) % (Math.PI * 2);
+
+      const pulse = Math.sin(pulsePhase) * squished ** 1.45 * 0.25;
 
       updateBlob(
         popped,
@@ -175,6 +190,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
         ride.crowd.onboard,
         ride.time < ride.shieldUntil,
         ride.time < ride.fluidUntil,
+        pulse,
       );
 
       if (popped) {
@@ -205,11 +221,14 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
           performer.role === 'acrobat' ||
           performer.role === 'musician' ||
           performer.role === 'spreader');
-      const focusX = stageFocus
-        ? ride.fluid.x * 0.56 + performer.x * (performer.role === 'spreader' ? 0.39 : 0.23)
-        : ride.fluid.x * 0.74;
+      const guestWeight = stageFocus ? (performer.role === 'spreader' ? 0.32 : 0.18) : 0;
+      const focusX = arcade
+        ? T.MathUtils.lerp(ride.fluid.x * 0.98, performer?.x ?? 0, guestWeight * 0.52)
+        : stageFocus
+          ? ride.fluid.x * 0.56 + performer.x * (performer.role === 'spreader' ? 0.39 : 0.23)
+          : ride.fluid.x * 0.74;
 
-      goal.set(focusX, 0.85, (ride.fluid.z - 0.32) * 0.5);
+      goal.set(focusX, 0.85, (ride.fluid.z - 0.32) * (arcade ? 0.73 : 0.5));
       focus.lerp(goal, 1 - Math.exp(-4 * dt));
       cameraLift += (ride.squeeze * 1.55 - cameraLift) * (1 - Math.exp(-3 * dt));
       const narrow =
@@ -222,7 +241,7 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
       );
 
       camera.lookAt(focus);
-      camera.rotateZ(jolt * 0.035);
+      camera.rotateZ(jolt * (braking ? 0.013 : 0.035));
 
       updateSmoke(
         !popped && performer?.role === 'smoker' ? performer : undefined,

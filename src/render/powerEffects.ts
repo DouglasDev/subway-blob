@@ -110,7 +110,11 @@ export function buildPowerEffects(scene: T.Object3D) {
     alarm.visible = mode === 'annoy';
 
     if (alarm.visible) {
-      alarm.position.set(0, 1.79 + 0.115 * Math.sin(age * 9), 0.24);
+      let top = 0;
+
+      for (const id of fluid.cells) top = Math.max(top, fluid.grid.centers[id * 3 + 1]);
+
+      alarm.position.set(0, top + 0.25 + 0.065 * Math.sin(age * 9), 0);
       alarm.rotation.y = 0.15 * Math.sin(age * 14);
       beacon.material.color.setHex(Math.sin(age * 29) > 0 ? 0xff3f2a : 0xff9e32);
 

@@ -1,5 +1,6 @@
 import * as T from 'three';
 import type { Rider } from '../sim/crowd.ts';
+import { SPREADER_LEG, spreaderHeading, spreaderSitting } from '../sim/hazards.ts';
 import { garment, riderStyle, shirts } from './wardrobe';
 
 type Figure = Pick<Rider, 'id' | 'x' | 'z' | 'heading' | 'stride' | 'role' | 'trajectory'>;
@@ -37,16 +38,43 @@ export function buildRiders(scene: T.Object3D) {
   const box = new T.BoxGeometry(1, 1, 1);
   const arms = part(scene, box, undefined, 128 * 2);
   const legs = part(scene, box, undefined, 128 * 4);
+  const seatedLegs = part(scene, new T.CylinderGeometry(0.47, 0.54, 1, 9), undefined, 128 * 4);
   const shoes = part(scene, box, undefined, 128 * 4);
   const hems = part(scene, new T.CylinderGeometry(0.34, 0.56, 1, 10));
   const bags = part(scene, box);
-  const meshes = [head, hair, arms, legs, shoes, hems, bags, ...torso];
+  const meshes = [head, hair, arms, legs, seatedLegs, shoes, hems, bags, ...torso];
   const person = new T.Object3D();
   const marker = new T.Object3D();
   const joint = new T.Object3D();
   const jointMatrix = new T.Matrix4();
   const matrix = new T.Matrix4();
   const color = new T.Color();
+  const up = new T.Vector3(0, 1, 0);
+  const axis = new T.Vector3();
+  const pivot = new T.Vector3();
+
+  function legSegment(
+    index: number,
+    shade: number,
+    sign: number,
+    from: typeof SPREADER_LEG.hip,
+    to: typeof SPREADER_LEG.hip,
+    width: number,
+  ) {
+    axis.set(sign * (to.x - from.x), to.y - from.y, to.z - from.z);
+
+    marker.position.set(
+      (sign * (from.x + to.x)) / 2,
+      (from.y + to.y) / 2 + 0.34,
+      (from.z + to.z) / 2,
+    );
+
+    marker.scale.set(width, axis.length() + 0.1, width);
+    marker.quaternion.setFromUnitVectors(up, axis.normalize());
+    marker.updateMatrix();
+    seatedLegs.setMatrixAt(index, matrix.multiplyMatrices(person.matrix, marker.matrix));
+    seatedLegs.setColorAt(index, color.setHex(shade));
+  }
 
   function hinge(x: number, y: number, z: number, angle: number) {
     joint.position.set(x, y, z);
@@ -69,7 +97,7 @@ export function buildRiders(scene: T.Object3D) {
     parent = person.matrix,
   ) {
     marker.position.set(x, y, z);
-    marker.rotation.x = swing;
+    marker.rotation.set(swing, 0, 0);
     marker.scale.set(sx, sy, sz);
     marker.updateMatrix();
     mesh.setMatrixAt(index, matrix.multiplyMatrices(parent, marker.matrix));
@@ -80,21 +108,23 @@ export function buildRiders(scene: T.Object3D) {
     riders: Figure[],
     acrobat?: { id: number; move: number; age: number },
     shove?: { id: number; age: number; heading: number },
+    sneeze?: { id: number; age: number },
   ) => {
     const counts = new Uint16Array(torso.length);
     let hairCount = 0;
     let legCount = 0;
+    let seatedLegCount = 0;
     let hemCount = 0;
 
     for (const [index, rider] of riders.entries()) {
       const { id, x, z, stride, role } = rider;
-      const size = riderSize(id);
+      const seated = role === 'spreader' && !rider.trajectory && !stride && spreaderSitting(x, z);
+      const size = seated ? 1 : riderSize(id);
       const style = riderStyle(id);
       const kind = role === 'takes' ? 1 : role === 'prank' ? 10 : style.shirt;
       const jacket = shirts[kind];
       const skin = skins[(id * 5 + 3) % skins.length];
       const dress = style.cut >= 8;
-      const seated = role === 'spreader' && !rider.trajectory;
       const skirt = !seated && style.cut >= 6;
       const long = style.cut % 2 === 0;
       const shorts = style.cut === 5;
@@ -109,14 +139,19 @@ export function buildRiders(scene: T.Object3D) {
       const pushing = shove?.id === id ? Math.max(0, 1 - shove.age / 0.42) : 0;
 
       if (seated) {
-        person.position.y = -0.25;
-        person.rotation.y = Math.PI;
+        person.position.y = -0.34;
+        person.rotation.y = spreaderHeading(x);
       }
 
       if (pushing && shove) {
         person.rotation.y = shove.heading;
         person.rotation.x = pushing * 0.16;
       }
+
+      const sneezing =
+        sneeze?.id === id && sneeze.age < 0.46 ? Math.sin((Math.PI * sneeze.age) / 0.46) : 0;
+
+      if (sneezing) person.rotation.x = sneezing * 0.29;
 
       if (acrobat?.id === id && !stride) {
         const beat = acrobat.age * 4.6;
@@ -129,7 +164,7 @@ export function buildRiders(scene: T.Object3D) {
             break;
           case 1:
             person.rotation.z = Math.PI + Math.sin(beat) * 0.16;
-            person.position.y += 1.6;
+            person.position.y += 0.13;
             break;
           case 2:
             person.rotation.y += beat * 1.9;
@@ -138,7 +173,7 @@ export function buildRiders(scene: T.Object3D) {
             break;
           case 3:
             person.rotation.x = -leap * 1.08;
-            person.position.y += leap * 0.72;
+            person.position.y += leap * 0.35;
             break;
 
           case 4: {
@@ -146,10 +181,16 @@ export function buildRiders(scene: T.Object3D) {
 
             person.rotation.z = turn * Math.PI * 2;
             person.position.x += Math.sin(turn * Math.PI * 2) * 0.35;
-            person.position.y += Math.sin(turn * Math.PI) * 1.45;
+            person.position.y += Math.sin(turn * Math.PI) * 0.23;
             break;
           }
         }
+
+        // Counter the movement of the local center when rotating the body.
+        pivot.set(0, 0.85 * size, 0).applyQuaternion(person.quaternion);
+        person.position.x -= pivot.x;
+        person.position.y += 0.85 * size - pivot.y;
+        person.position.z -= pivot.z;
       }
 
       person.scale.setScalar(size);
@@ -187,15 +228,48 @@ export function buildRiders(scene: T.Object3D) {
 
         if (seated) {
           stamp(arms, limb, jacket, sign * 0.245, 0.94, 0.15, 0.104, 0.32, 0.113, -0.58);
-          stamp(legs, legCount++, style.bottom, sign * 0.27, 0.78, 0.25, 0.49, 0.25, 0.35, 0.04);
-          stamp(legs, legCount++, style.bottom, sign * 0.48, 0.48, 0.55, 0.25, 0.51, 0.25, -0.13);
-          stamp(shoes, foot, style.sneaker, sign * 0.48, 0.33, 0.66, 0.25, 0.16, 0.34);
-          stamp(shoes, foot + 1, 0xe5e0d3, sign * 0.48, 0.26, 0.66, 0.26, 0.045, 0.35);
+          const { hip, knee, ankle } = SPREADER_LEG;
+
+          legSegment(seatedLegCount++, style.bottom, sign, hip, knee, 0.23);
+          legSegment(seatedLegCount++, style.bottom, sign, knee, ankle, 0.19);
+
+          stamp(
+            shoes,
+            foot,
+            style.sneaker,
+            sign * ankle.x,
+            0.414,
+            ankle.z + 0.06,
+            0.19,
+            0.105,
+            0.275,
+          );
+
+          stamp(
+            shoes,
+            foot + 1,
+            0xe5e0d3,
+            sign * ankle.x,
+            0.366,
+            ankle.z + 0.062,
+            0.2,
+            0.042,
+            0.28,
+          );
 
           continue;
         }
 
-        hinge(sign * 0.202, 1.315, 0.006, -angle * 0.8 - pushing * 1.4);
+        hinge(
+          sign * 0.202,
+          1.315,
+          0.006,
+          -angle * 0.8 -
+            pushing * 1.4 -
+            sneezing * (sign > 0 ? 2.25 : 0.32) -
+            (role === 'musician' ? 1.04 : 0),
+        );
+
         stamp(arms, limb, jacket, 0, -0.255, 0, 0.092, 0.51, 0.11, 0, jointMatrix);
 
         hinge(legX, hipY, 0, angle);
@@ -254,6 +328,7 @@ export function buildRiders(scene: T.Object3D) {
     hair.count = hairCount;
     hems.count = hemCount;
     legs.count = legCount;
+    seatedLegs.count = seatedLegCount;
 
     for (const [kind, mesh] of torso.entries()) mesh.count = counts[kind];
 

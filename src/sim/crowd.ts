@@ -1,6 +1,14 @@
 import { CROSS_DEPTH, CROSS_SEATS, CROSS_WIDTH, DOORS, HEIGHT_LIMIT } from './car.ts';
 import { Grid } from './grid.ts';
-import { RHINO_PRANK, SPREADER_X, SPREADER_Z, sprayHits } from './hazards.ts';
+import {
+  RHINO_PRANK,
+  SPREADER_X,
+  SPREADER_Z,
+  SPREADER_LEG,
+  spreaderHeading,
+  spreaderSitting,
+  sprayHits,
+} from './hazards.ts';
 import { hasGuest, seededRandom } from './encounters.ts';
 import type { Encounter } from './encounters.ts';
 import { omnyLocation, OMNY_SECONDS } from './powers.ts';
@@ -86,7 +94,7 @@ export class Crowd {
 
     const departures = stop < 14 ? 2 : 4;
     const planned = this.riders.filter((rider) => rider.wantsExit);
-    const waiting = this.riders.filter((rider) => rider.powerExit);
+    const waiting = this.riders.filter((rider) => rider.powerExit && !rider.wantsExit);
     const allowance = light ? LIGHT_STOP_POWER_EXITS : POWER_EXITS;
     const queued = waiting.slice(0, allowance);
 
@@ -152,7 +160,7 @@ export class Crowd {
   }
 
   get performer() {
-    return this.riders.find((rider) => rider.role && !rider.wantsExit);
+    return this.riders.find((rider) => rider.role && !rider.wantsExit && !rider.trajectory?.exits);
   }
 
   get hasTraffic() {
@@ -198,7 +206,10 @@ export class Crowd {
   endEncounter() {
     const performer = this.performer;
 
-    if (performer) performer.wantsExit = true;
+    if (!performer) return;
+
+    performer.wantsExit = true;
+    performer.powerExit = false;
   }
 
   react(
@@ -217,7 +228,6 @@ export class Crowd {
     const nearby = this.riders
       .filter(
         (rider) =>
-          !rider.role &&
           !rider.trajectory &&
           !rider.wantsExit &&
           !rider.powerExit &&
@@ -370,6 +380,29 @@ export class Crowd {
             x: rider.slot.x + Math.sin(time * 2.8) * 1.55,
             z: rider.slot.z + Math.sin(time * 4.3) * 0.22,
           };
+        } else if (rider.role === 'acrobat') {
+          const change = Math.cos(time * 1.65);
+          const step = Math.sign(change) * Math.min(1, Math.abs(change) * 2.5);
+
+          target = {
+            x: rider.slot.x + step * 0.32,
+            z: 0.21 + (step + 1) * 0.16,
+          };
+        } else if (rider.role === 'musician' || rider.role === 'sneezy') {
+          const roaming = rider.role === 'sneezy';
+
+          target = {
+            x: rider.slot.x + Math.sin(time * (roaming ? 0.95 : 0.66)) * (roaming ? 1.85 : 1.2),
+            z: 0.18 + Math.sin(time * 1.32) * 0.31,
+          };
+        } else if (rider.role === 'shover') {
+          const near = Math.hypot(blob.x - rider.x, blob.z - rider.z) < 1.6;
+          const shift = near ? (blob.x - rider.slot.x) * 0.72 : Math.sin(time * 1.2);
+
+          target = {
+            x: rider.slot.x + Math.max(-0.95, Math.min(0.95, shift)),
+            z: near ? Math.max(-0.52, Math.min(0.52, blob.z)) : Math.sin(time * 1.5) * 0.35,
+          };
         } else if (prop?.pushed) {
           target = { x: prop.x - (prop.kind === 'bike' ? 0.53 : 0.31), z: prop.z };
         } else if (performance && !rider.role && Math.abs(rider.slot.x - performer.x) < 2.3) {
@@ -382,16 +415,16 @@ export class Crowd {
         }
 
         const recoiling = (rider.rhinoRecoilUntil ?? 0) > time;
+        const speed =
+          charging && rider === performer
+            ? 2.05
+            : recoiling
+              ? 1.82
+              : rider.role === 'shover'
+                ? 1.4
+                : 1.05;
 
-        this.walkToward(
-          rider,
-          target,
-          dt,
-          time,
-          grid,
-          fixtures,
-          charging && rider === performer ? 2.05 : recoiling ? 1.82 : 1.05,
-        );
+        this.walkToward(rider, target, dt, time, grid, fixtures, speed);
 
         if (prop?.pushed && Math.hypot(rider.x - target.x, rider.z - target.z) < 0.075) {
           rider.slot = { ...rider.slot, x: rider.x, z: rider.z };
@@ -504,8 +537,14 @@ export class Crowd {
     const x = Math.max(-4.53, Math.min(4.53, rider.x + dx * scale));
     const z = Math.max(-1, Math.min(1, rider.z + dz * scale));
 
-    if (this.clear(grid, fixtures, x, rider.z)) rider.x = x;
-    if (this.clear(grid, fixtures, rider.x, z)) rider.z = z;
+    const steppingBySeat =
+      rider.role === 'spreader' &&
+      rider.slot.x < 2 &&
+      Math.abs(rider.x - rider.slot.x) < 0.31 &&
+      Math.abs(rider.z - rider.slot.z) < 0.23;
+
+    if (steppingBySeat || this.clear(grid, fixtures, x, rider.z)) rider.x = x;
+    if (steppingBySeat || this.clear(grid, fixtures, rider.x, z)) rider.z = z;
 
     rider.heading = Math.atan2(dx, dz);
     rider.stride = time * 12 + rider.id;
@@ -530,27 +569,42 @@ export class Crowd {
     const shoulderX = 0.16 + 0.09 * packed;
     const shoulderZ = 0.23 + 0.02 * packed;
 
-    for (const { x, z, prop, role, trajectory } of this.riders) {
+    for (const { x, z, prop, role, stride, trajectory } of this.riders) {
       if (z < -1.46) continue;
 
-      if (role === 'spreader' && !trajectory) {
+      if (role === 'spreader' && !trajectory && !stride && spreaderSitting(x, z)) {
         grid.block(
           mask,
           { x: x - 0.23, y: 0.47, z: z - 0.22 },
           { x: x + 0.23, y: 1.38, z: z + 0.13 },
         );
 
+        const heading = spreaderHeading(x);
+        const sin = Math.sin(heading);
+        const cos = Math.cos(heading);
+        const { hip, knee, ankle } = SPREADER_LEG;
+
         for (const side of [-1, 1]) {
-          const knee = x + side * 0.48;
+          for (const [from, to] of [
+            [hip, knee],
+            [knee, ankle],
+          ]) {
+            for (let i = 0; i <= 6; i++) {
+              const t = i / 6;
+              const localX = side * (from.x + (to.x - from.x) * t);
+              const localZ = from.z + (to.z - from.z) * t;
+              const py = from.y + (to.y - from.y) * t;
+              const px = x + localX * cos + localZ * sin;
+              const pz = z - localX * sin + localZ * cos;
 
-          grid.block(
-            mask,
-            { x: knee - 0.18, y: 0, z: z - 0.78 },
-            { x: knee + 0.18, y: 0.61, z: z - 0.25 },
-          );
+              grid.block(
+                mask,
+                { x: px - 0.106, y: py - 0.105, z: pz - 0.106 },
+                { x: px + 0.106, y: py + 0.105, z: pz + 0.106 },
+              );
+            }
+          }
         }
-
-        grid.block(mask, { x: x - 0.47, y: 0.38, z: z - 0.48 }, { x: x + 0.47, y: 0.59, z });
 
         continue;
       }

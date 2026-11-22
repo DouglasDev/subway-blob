@@ -140,12 +140,15 @@ export function buildBlob(scene: T.Object3D, fluid: Fluid, blocked: Uint8Array) 
     riders = 12,
     quiet = false,
     superFluid = false,
+    pulse = 0,
   ) => {
-    slime.color
-      .copy(heat < 0.5 ? green : amber)
-      .lerp(heat < 0.5 ? amber : red, heat < 0.5 ? heat * 2 : (heat - 0.5) * 2);
+    const tone = T.MathUtils.clamp(heat + pulse, 0, 1);
 
-    if (quiet) slime.color.copy(blue);
+    slime.color
+      .copy(tone < 0.5 ? green : amber)
+      .lerp(tone < 0.5 ? amber : red, tone < 0.5 ? tone * 2 : (tone - 0.5) * 2);
+
+    if (quiet) slime.color.copy(blue).multiplyScalar(1 + pulse * 0.5);
     else if (superFluid) slime.color.lerp(aqua, 0.64);
 
     const fatigue = T.MathUtils.clamp((riders - 12) / 55, 0, 1);
@@ -231,6 +234,9 @@ export function buildBlob(scene: T.Object3D, fluid: Fluid, blocked: Uint8Array) 
       [1.2, 0.067],
       [0.91, 0.06],
       [0.58, 0.055],
+      [0.36, 0.065],
+      [0.24, 0.064],
+      [0.14, 0.061],
     ]) {
       let hits = 0;
 

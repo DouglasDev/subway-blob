@@ -18,8 +18,10 @@ import {
   SODA_DRAIN,
   SODA_RADIUS,
   SODA_SPEED,
-  SPREADER_X,
-  SPREADER_Z,
+  GUEST_RADIUS,
+  SPEAKER_RADIUS,
+  SNEEZE_SECONDS,
+  SPREADER_SEATS,
 } from './hazards.ts';
 import { Fluid } from './fluid.ts';
 import { guestContent } from './guestContent.ts';
@@ -52,6 +54,8 @@ export const QUIET_SECONDS = 6.2;
 
 const TURN_RATE = 11;
 const REACTION_DELAY = 2;
+const EARLY_DAMAGE_MULTIPLIER = 1.6;
+const DAMAGE_TAPER_STOPS = 6;
 
 export type Input = { x: number; z: number };
 
@@ -85,6 +89,7 @@ export class Ride {
     variant: number;
     dialogueAt: number;
     reactionAt?: number | null;
+    nextSneezeAt?: number;
     location?: Location;
     line?: string;
     exchange?: { take: string; verdict: string; beat: 'question' | 'take' | 'verdict' };
@@ -107,7 +112,8 @@ export class Ride {
   private steeringHeading = 0;
   fluidUntil = 0;
   sticky = false;
-  jolt: { at: number; strength: number } | null = null;
+  jolt: { at: number; strength: number; braking?: boolean } | null = null;
+  sneeze: (Location & { at: number }) | null = null;
   shove: { x: number; z: number; at: number } | null = null;
   private nextTrackJolt = Infinity;
   private nextMurmur = 5;
@@ -165,6 +171,36 @@ export class Ride {
     return this.act && this.phase !== 'popped' ? this.encounter?.line : undefined;
   }
 
+  get damageMultiplier() {
+    const progress = Math.min(1, this.score / DAMAGE_TAPER_STOPS);
+
+    return 1 + (EARLY_DAMAGE_MULTIPLIER - 1) * (1 - progress);
+  }
+
+  get guestDanger() {
+    const { encounter, act, sneeze, time } = this;
+
+    if (!encounter) return;
+
+    if (encounter.kind === 'speaker') {
+      const age = time - encounter.began - REACTION_DELAY;
+
+      if (encounter.location && age >= 0 && age < PA_FEEDBACK_SECONDS)
+        return { ...encounter.location, radius: SPEAKER_RADIUS };
+
+      return;
+    }
+
+    if (encounter.kind === 'sneezy') {
+      if (act && sneeze && time - sneeze.at < SNEEZE_SECONDS)
+        return { ...sneeze, radius: GUEST_RADIUS };
+
+      return;
+    }
+
+    if (act) return { x: act.x, z: act.z, radius: GUEST_RADIUS };
+  }
+
   private updateGuest() {
     const { encounter, act } = this;
 
@@ -179,29 +215,38 @@ export class Ride {
       this.cues.push(encounter.kind);
     }
 
-    if (!act) {
-      if (encounter.kind === 'speaker' && encounter.location && this.time >= this.shieldUntil) {
-        const age = this.time - encounter.began - REACTION_DELAY;
-        const distance = Math.abs(this.fluid.x - encounter.location.x);
+    if (act && encounter.kind === 'sneezy') {
+      encounter.nextSneezeAt ??= this.time + 1.25;
 
-        if (age >= 0 && age < PA_FEEDBACK_SECONDS)
-          this.guestPressure = 0.27 + Math.max(0, 1 - distance / 3.4) * 0.44;
+      if (this.time >= encounter.nextSneezeAt) {
+        this.sneeze = { x: act.x, z: act.z, at: this.time };
+        encounter.nextSneezeAt = this.time + 3.45;
+        this.cues.push('sneeze');
+      }
+    }
+
+    const danger = this.guestDanger;
+
+    if (danger && this.time >= this.shieldUntil) {
+      const { centers } = this.car.grid;
+      let closest = Infinity;
+
+      for (const id of this.fluid.cells) {
+        const offset = id * 3;
+        const distance = (centers[offset] - danger.x) ** 2 + (centers[offset + 2] - danger.z) ** 2;
+
+        closest = Math.min(closest, distance);
       }
 
-      return;
+      const distance = Math.sqrt(closest);
+
+      this.guestPressure =
+        encounter.kind === 'speaker'
+          ? Math.max(0, 1 - distance / danger.radius) * 0.71
+          : guestProximity(distance) * (encounter.kind === 'sneezy' ? 2.2 : 1);
     }
 
-    const { centers } = this.car.grid;
-    let closest = Infinity;
-
-    for (const id of this.fluid.cells) {
-      const offset = id * 3;
-      const distance = (centers[offset] - act.x) ** 2 + (centers[offset + 2] - act.z) ** 2;
-
-      closest = Math.min(closest, distance);
-    }
-
-    if (this.time >= this.shieldUntil) this.guestPressure = guestProximity(Math.sqrt(closest));
+    if (!act) return;
 
     if (this.time < encounter.dialogueAt) return;
 
@@ -324,10 +369,14 @@ export class Ride {
       STEP,
       !quiet && this.encounter?.kind === 'smoker',
       this.guestPressure,
+      this.damageMultiplier,
     );
 
     this.tolerance = this.sticky
-      ? Math.max(0, Math.min(nextTolerance, this.tolerance) - SODA_DRAIN * STEP)
+      ? Math.max(
+          0,
+          Math.min(nextTolerance, this.tolerance) - SODA_DRAIN * this.damageMultiplier * STEP,
+        )
       : nextTolerance;
 
     if (this.tolerance <= 1e-9) {
@@ -621,9 +670,11 @@ export class Ride {
     if (kind === 'ac') return;
 
     if (kind === 'spreader') {
-      this.lastEncounterX = SPREADER_X;
+      const seat = SPREADER_SEATS[Number(this.placements() < 0.46)];
 
-      return { x: SPREADER_X, z: SPREADER_Z };
+      this.lastEncounterX = seat.x;
+
+      return seat;
     }
 
     const zones = kind === 'acrobat' ? [-1.66, 1.66] : [-3.32, -2.15, -0.69, 0.74, 2.13, 3.32];
@@ -660,7 +711,7 @@ export class Ride {
       }
 
       if (this.phaseTime + 1e-9 >= TRAVEL_SECONDS) {
-        this.jolt = { at: this.time, strength: 0.69 };
+        this.jolt = { at: this.time, strength: -this.direction * 0.69, braking: true };
         this.cues.push('brakeJolt');
         this.stop++;
         this.arrive();
@@ -669,6 +720,7 @@ export class Ride {
       if (this.encounter && this.stop >= this.encounter.expires) {
         this.crowd.endEncounter();
         this.encounter = null;
+        this.sneeze = null;
       }
 
       if (this.stop > 0 && this.stop % ENCOUNTER_CYCLE === 0) {

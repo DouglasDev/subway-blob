@@ -231,12 +231,18 @@ export function buildInstruments(scene: T.Object3D) {
 
   scene.add(...instruments);
 
-  return (variant: number | undefined, x = 0, z = 0, time = 0) => {
+  return (variant: number | undefined, x = 0, z = 0, time = 0, heading = 0) => {
     for (const [index, item] of instruments.entries()) {
       item.visible = index === variant;
 
       if (item.visible) {
-        item.position.set(x, 1.07 + Math.sin(time * 8) * 0.055, z + 0.19);
+        item.position.set(
+          x + Math.sin(heading) * 0.22,
+          1.07 + Math.sin(time * 8) * 0.055,
+          z + Math.cos(heading) * 0.22,
+        );
+
+        item.rotation.y = heading;
         item.rotation.z = Math.sin(time * 4.1) * 0.18 - (index === 4 ? 0.29 : 0);
       }
     }

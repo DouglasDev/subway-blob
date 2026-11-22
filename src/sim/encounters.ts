@@ -1,3 +1,4 @@
+import { GUEST_RADIUS } from './hazards.ts';
 import type { Power } from './powers.ts';
 
 export function seededRandom(seed: number) {
@@ -21,6 +22,7 @@ export const ENCOUNTERS = {
   soda: { name: 'Sticky soda spill', stops: 1 },
   spreader: { name: 'Manspreader', stops: 1 },
   shover: { name: 'Shoving rider', stops: 1 },
+  sneezy: { name: 'Sneezy rider', stops: 1 },
   weird: { name: 'A rider is following you', stops: 1 },
 } as const;
 
@@ -36,6 +38,7 @@ export type Cue =
   | 'trackJolt'
   | 'brakeJolt'
   | 'shove'
+  | 'sneeze'
   | 'murmur'
   | 'rhino'
   | 'omnyLand';
@@ -82,6 +85,7 @@ export function squeezeTolerance(
   dt: number,
   smoker = false,
   guest = 0,
+  damageMultiplier = 1,
 ) {
   const low = smoker ? 0.14 : 0.21;
   const high = smoker ? 0.6 : 0.75;
@@ -91,9 +95,9 @@ export function squeezeTolerance(
   const strain = Math.max(0, Math.min(1, (squeeze - low) / (high - low)));
   const drain = (strain * (0.38 + 0.62 * strain)) / 30 + guest / 95;
 
-  return Math.max(0, value - Math.min(1 / 30, drain) * dt);
+  return Math.max(0, value - Math.min(1 / 30, drain) * damageMultiplier * dt);
 }
 
 export function guestProximity(distance: number) {
-  return Math.max(0, Math.min(1, (0.83 - distance) / 0.48));
+  return Math.max(0, Math.min(1, (GUEST_RADIUS - distance) / (0.48 * 1.3)));
 }

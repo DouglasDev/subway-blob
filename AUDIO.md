@@ -42,3 +42,5 @@ The 12 subway complaints below use six male and six female American English pres
 | 10   | af_river     | You got a whole train. Why my elbow?    |
 | 11   | am_puck      | Can we get one normal stop?             |
 | 12   | af_jessica   | Oh, come on. The doors are right there. |
+
+The wandering rider’s sneeze uses [Sneeze.wav by transitking](https://freesound.org/people/transitking/sounds/59324/), marked CC0 1.0. The mono clip was filtered, normalized, and faded.

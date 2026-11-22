@@ -5,6 +5,10 @@ const BRAKE = 1.85;
 const COAST = TRAVEL_SECONDS - ACCELERATE - BRAKE;
 const DISTANCE = COAST + (ACCELERATE + BRAKE) / 2;
 
+export function brakingLurch(age: number) {
+  return age > 0 && age < 0.56 ? Math.sin((age / 0.56) * Math.PI) ** 2 : 0;
+}
+
 export function trainSpeed(elapsed: number) {
   const t = Math.max(0, Math.min(1, elapsed / ACCELERATE, (TRAVEL_SECONDS - elapsed) / BRAKE));
 

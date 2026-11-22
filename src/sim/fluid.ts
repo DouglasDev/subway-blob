@@ -110,7 +110,7 @@ export class Fluid {
       const y = grid.centers[offset + 1];
       const rank = bodyDistance(localX * cos - localZ * sin, y, localX * sin + localZ * cos);
 
-      ranks[id] = superFluid ? rank * 0.5 + (localX ** 2 + localZ ** 2 + y * 0.27) * 0.19 : rank;
+      ranks[id] = superFluid ? localX ** 2 + localZ ** 2 + y * 1.85 : rank;
 
       if (rank <= 0.035) comfortable++;
     }

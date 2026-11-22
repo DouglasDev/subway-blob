@@ -176,7 +176,14 @@ export function buildRideObjects(scene: T.Object3D) {
       Math.max(0, 1 - (time - ride.rhinoImpactAt) * 4),
     );
 
-    updateInstruments(act === 'musician' ? variant : undefined, actor?.x, actor?.z, elapsed);
+    updateInstruments(
+      act === 'musician' ? variant : undefined,
+      actor?.x,
+      actor?.z,
+      elapsed,
+      actor ? riderFacing(actor) : 0,
+    );
+
     mic.visible = act === 'takes';
     stageMark.visible = !!actor;
 

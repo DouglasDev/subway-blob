@@ -12,7 +12,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Scene } from 'three';
 import { buildBlob } from '../src/render/blobMesh.ts';
-import { trainSpeed, travelProgress, TRAVEL_SECONDS } from '../src/sim/trainMotion.ts';
+import {
+  brakingLurch,
+  trainSpeed,
+  travelProgress,
+  TRAVEL_SECONDS,
+} from '../src/sim/trainMotion.ts';
 import { STATIONS, stationIndex, travelDirection } from '../src/sim/route.ts';
 import {
   ENCOUNTERS,
@@ -27,7 +32,15 @@ import type { Encounter } from '../src/sim/encounters.ts';
 import { guestContent, PRANKS } from '../src/sim/guestContent.ts';
 import { Crowd } from '../src/sim/crowd.ts';
 import { Fluid } from '../src/sim/fluid.ts';
-import { RHINO_PRANK, SPREADER_X, SPREADER_Z, sprayHits } from '../src/sim/hazards.ts';
+import {
+  GUEST_RADIUS,
+  RHINO_PRANK,
+  SNEEZE_SECONDS,
+  SPREADER_SEATS,
+  SPREADER_X,
+  SPREADER_Z,
+  sprayHits,
+} from '../src/sim/hazards.ts';
 import { Grid } from '../src/sim/grid.ts';
 import { HOT_VOLUME, QUIET_SECONDS, Ride, STANDARD_VOLUME, STEP } from '../src/sim/ride.ts';
 
@@ -376,7 +389,8 @@ test('guest proximity drains tolerance, while Cool Pack heals and Quiet Bubble p
   const guest = guestProximity(0.4);
 
   assert.ok(guest > 0.8);
-  assert.equal(guestProximity(0.85), 0);
+  assert.ok(guestProximity(0.99) > 0);
+  assert.equal(guestProximity(GUEST_RADIUS), 0);
   assert.ok(squeezeTolerance(0.6, 0, 1, false, guest) < 0.6);
   assert.ok(squeezeTolerance(0.6, 0, 1) > 0.6);
 
@@ -409,6 +423,78 @@ test('guest proximity drains tolerance, while Cool Pack heals and Quiet Bubble p
   ride.tick({ x: 0, z: 0 });
   assert.ok(ride.time + 1e-9 >= ride.shieldUntil);
   assert.deepEqual(ride.inventory, [null, null]);
+});
+
+test('the opening starts at zero Squished and the extra damage tapers across six stops', () => {
+  const ride = new Ride();
+
+  assert.equal(ride.tolerance, 1);
+  assert.equal(ride.damageMultiplier, 1.6);
+  const firstStop = squeezeTolerance(1, 0.75, 1, false, 0, ride.damageMultiplier);
+
+  ride.score = 3;
+  const thirdStop = squeezeTolerance(1, 0.75, 1, false, 0, ride.damageMultiplier);
+
+  ride.score = 6;
+  assert.equal(ride.damageMultiplier, 1);
+  const sixthStop = squeezeTolerance(1, 0.75, 1, false, 0, ride.damageMultiplier);
+
+  assert.ok(firstStop < thirdStop && thirdStop < sixthStop);
+  assert.equal(squeezeTolerance(0.99, 0, 1, false, 0, 1.6), 1);
+});
+
+test('the sneezy rider roams and a sneeze damages only while nearby and active', () => {
+  const ride = new Ride();
+  const rider = ride.crowd.riders[0];
+
+  ride.phase = 'running';
+  ride.crowd.riders = [rider];
+
+  Object.assign(rider, {
+    x: 0.69,
+    z: 0.28,
+    role: 'sneezy',
+    slot: { ...rider.slot, x: 0.69, z: 0.28 },
+  });
+
+  ride.encounter = {
+    kind: 'sneezy',
+    expires: 1,
+    began: 0,
+    variant: 0,
+    dialogueAt: 0,
+    nextSneezeAt: 0.1,
+  };
+
+  ride.tick({ x: 0, z: 0 });
+  assert.equal(Boolean(ride.guestDanger), false);
+  assert.equal(ride.tolerance, 1);
+
+  ride.tick({ x: 0, z: 0 });
+  const origin = ride.sneeze;
+  const from = ride.tolerance;
+
+  assert.ok(origin);
+  assert.equal(ride.guestDanger?.radius, GUEST_RADIUS);
+  assert.ok(ride.cues.includes('sneeze'));
+  assert.ok(ride.guestPressure > 0);
+
+  for (let step = 0; step < Math.ceil(SNEEZE_SECONDS / STEP); step++) ride.tick({ x: 0, z: 0 });
+
+  assert.ok(ride.tolerance < from);
+  assert.ok(Math.abs(rider.x - origin.x) > 0.35);
+  assert.equal(Boolean(ride.guestDanger), false);
+  assert.equal(ride.guestPressure, 0);
+
+  for (const role of ['acrobat', 'musician', 'shover'] as const) {
+    Object.assign(rider, { role, x: 2.6, z: 0.2, slot: { ...rider.slot, x: 2.6, z: 0.2 } });
+
+    for (let step = 0; step < 25; step++) {
+      ride.crowd.update(STEP, step * STEP, ride.fluid, ride.car.grid, ride.car.fixtures);
+    }
+
+    assert.ok(Math.hypot(rider.x - 2.6, rider.z - 0.2) > 0.17, role);
+  }
 });
 
 test('a weighted deck favors both gross powers and includes every new pickup', () => {
@@ -508,6 +594,48 @@ test('power-up exits wait for open doors and departures update the rider count',
 
   assert.ok(!crowd.riders.some(({ id }) => id === original));
   assert.ok(crowd.exited >= 1);
+});
+
+test('crowd power-ups move and eject special guests under the regular departure rules', () => {
+  const ride = new Ride();
+  const { crowd, car, fluid } = ride;
+  const singer = crowd.riders[0];
+
+  singer.role = 'musician';
+  crowd.prepare(0);
+  crowd.react('annoy', singer, 0, true);
+
+  assert.ok(singer.trajectory?.exits);
+  assert.equal(crowd.performer, undefined);
+
+  for (let step = 0; step < 60; step++) {
+    crowd.update(STEP, step * STEP, fluid, car.grid, car.fixtures);
+    crowd.commitDepartures();
+  }
+
+  assert.ok(!crowd.riders.includes(singer));
+  assert.equal(crowd.exited, 4);
+
+  const seat = SPREADER_SEATS[1];
+  const spreader = crowd.riders[0];
+
+  crowd.riders = [spreader];
+
+  Object.assign(spreader, {
+    ...seat,
+    role: 'spreader',
+    trajectory: undefined,
+    slot: { ...spreader.slot, ...seat },
+  });
+
+  crowd.react('omny', seat, 4, false);
+  assert.ok(spreader.away);
+
+  for (let step = 0; step < 15; step++) {
+    crowd.update(STEP, 4 + step * STEP, fluid, car.grid, car.fixtures);
+  }
+
+  assert.ok(Math.abs(spreader.x - seat.x) > 0.35);
 });
 
 test('power-up departures can thin a light stop without reversing crowd growth', () => {
@@ -751,6 +879,22 @@ test('Super Fluid reaches farther through a one-cell passage at the same volume'
   assertVolume(ride.fluid, ride.mask);
 });
 
+test('Super Fluid lowers the occupied surface without changing volume', () => {
+  const { car } = new Ride();
+  const fluid = new Fluid(car.grid, STANDARD_VOLUME, 0, 0);
+  const mask = new Uint8Array(car.grid.size);
+
+  const top = () => Math.max(...fluid.cells.map((id) => car.grid.centers[id * 3 + 1]));
+
+  assert.ok(fluid.step(mask));
+  const standing = top();
+
+  for (let tick = 0; tick < 7; tick++) assert.ok(fluid.step(mask, 0, 0, STANDARD_VOLUME, 0, true));
+
+  assert.ok(top() < standing * 0.55);
+  assertVolume(fluid, mask);
+});
+
 test('Slime Spray only hits the cone in front of the blob', () => {
   assert.ok(sprayHits(1, 0.2, Math.PI / 2));
   assert.ok(!sprayHits(-1, 0.2, Math.PI / 2));
@@ -811,7 +955,7 @@ test('a shover pushes the blob away and seated legs occupy the aisle', () => {
   assert.ok(ride.fluid.x < before);
   assertVolume(ride.fluid, ride.mask);
 
-  Object.assign(rider, { x: SPREADER_X, z: SPREADER_Z, role: 'spreader' });
+  Object.assign(rider, { x: SPREADER_X, z: SPREADER_Z, role: 'spreader', stride: 0 });
   const mask = ride.car.fixtures.slice();
 
   ride.crowd.occupy(ride.car.grid, mask, 0);
@@ -822,6 +966,48 @@ test('a shover pushes the blob away and seated legs occupy the aisle', () => {
     assert.equal(ride.car.fixtures[knee], 0);
     assert.equal(mask[knee], 1);
   }
+});
+
+test('the spreader can occupy both seats and leaves a gap between angled legs', () => {
+  for (const seat of SPREADER_SEATS) {
+    const ride = new Ride();
+    const rider = ride.crowd.riders[0];
+    const grid = ride.car.grid;
+
+    Object.assign(rider, { ...seat, role: 'spreader' });
+    ride.crowd.riders = [rider];
+    const mask = ride.car.fixtures.slice();
+    const sin = Math.sin(seat.heading);
+    const cos = Math.cos(seat.heading);
+
+    const point = (x: number, y: number, z: number) =>
+      grid.at(seat.x + x * cos + z * sin, y, seat.z - x * sin + z * cos);
+
+    ride.crowd.occupy(grid, mask, 0);
+    assert.equal(mask[point(0, 0.49, 0.49)], 0);
+    for (const side of [-1, 1]) assert.equal(mask[point(side * 0.44, 0.49, 0.49)], 1);
+  }
+});
+
+test('braking lurch uses the leg just traveled at both terminal reversals', () => {
+  for (const stop of [14, 29]) {
+    const ride = new Ride();
+    const arriving = travelDirection(stop);
+
+    ride.phase = 'running';
+    ride.stop = stop;
+    ride.phaseTime = TRAVEL_SECONDS - STEP;
+    ride.tick({ x: 0, z: 0 });
+
+    assert.equal(ride.phase, 'arriving');
+    assert.equal(ride.direction, -arriving);
+    assert.equal(ride.jolt?.braking, true);
+    assert.equal(Math.sign(ride.jolt!.strength), -arriving);
+  }
+
+  assert.equal(brakingLurch(0), 0);
+  assert.ok(brakingLurch(0.12) > 0 && brakingLurch(0.52) > 0);
+  assert.equal(brakingLurch(0.56), 0);
 });
 
 test('station braking jolts on arrival after 6.5 seconds in motion', () => {

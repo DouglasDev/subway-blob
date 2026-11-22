@@ -63,6 +63,8 @@ function newRide() {
 }
 
 function soundMuted() {
+  if (arcadeMode) return false;
+
   try {
     return localStorage.getItem(soundKey) === 'true';
   } catch {
@@ -166,7 +168,7 @@ export function App() {
   const stick = useRef<Input>({ x: 0, z: 0 });
   const touches = useRef(new Map<number, string>());
   const arcade = useRef<typeof import('@rcade/plugin-input-classic') | null>(null);
-  const actions = useRef(new Set<'a' | 'b' | 'start' | 'mute'>());
+  const actions = useRef(new Set<'a' | 'b' | 'start'>());
 
   const restart = useCallback(() => {
     const next = newRide();
@@ -188,6 +190,8 @@ export function App() {
 
   useEffect(() => {
     audio.setMute(sound);
+
+    if (arcadeMode) return;
 
     try {
       localStorage.setItem(soundKey, String(sound));
@@ -223,8 +227,6 @@ export function App() {
           audio.unlock();
           actions.current.add('start');
         }
-
-        if (button === 'TWO_PLAYER') actions.current.add('mute');
       });
     });
 
@@ -260,7 +262,7 @@ export function App() {
         actions.current.add(event.code === 'KeyZ' ? 'a' : 'b');
       }
 
-      if (!event.repeat && event.code === 'KeyM') toggleSound();
+      if (!arcadeMode && !event.repeat && event.code === 'KeyM') toggleSound();
       if (!keyDirection[event.code]) return;
 
       event.preventDefault();
@@ -321,14 +323,15 @@ export function App() {
       const activate = actions.current.has('start') || (arcadeEmbedded && actions.current.has('a'));
       const activeRide = ride.phase !== 'ready' && ride.phase !== 'popped';
 
-      if (actions.current.has('mute')) toggleSound();
-
       if (activate && ride.phase === 'ready') {
         audio.unlock();
         ride.start();
       } else if (activate && poppedAt >= 0 && now - poppedAt > 1060) {
         audio.unlock();
+        actions.current.clear();
         restart();
+
+        return;
       } else if (activeRide) {
         if (actions.current.has('a')) ride.usePower(0);
         if (actions.current.has('b')) ride.usePower(1);
@@ -342,7 +345,8 @@ export function App() {
       });
 
       for (const cue of ride.cues.splice(0)) {
-        const source = cue === 'speaker' ? ride.encounter?.location : undefined;
+        const source =
+          cue === 'speaker' ? ride.encounter?.location : cue === 'sneeze' ? ride.sneeze : undefined;
 
         audio.cue(cue, source ? (source.x - ride.fluid.x) / 4.5 : 0);
       }
@@ -385,7 +389,7 @@ export function App() {
       cancelAnimationFrame(frame);
       view.dispose();
     };
-  }, [audio, restart, ride, toggleSound]);
+  }, [audio, restart, ride]);
 
   useEffect(() => {
     if (hud.score <= best) return;
@@ -410,7 +414,7 @@ export function App() {
   const activePower = hud.power ?? hud.sustainedPower;
   const ready = hud.phase === 'ready';
   const ended = hud.phase === 'popped';
-  const result = showResult;
+  const result = ended && showResult;
   const controlsDisabled = graphicsError || ready || ended;
 
   function usePower(slot: 0 | 1) {
@@ -437,7 +441,7 @@ export function App() {
       {arcadeMode ? (result ? 'A · Retry' : 'A · Start') : result ? 'Ride again' : 'Start ride'}
     </Button>
   );
-  const soundButton = (
+  const soundButton = !arcadeMode && (
     <SoundButton
       type="button"
       data-touch={touchLayout}
@@ -446,7 +450,6 @@ export function App() {
       aria-label={sound ? 'Unmute sound' : 'Mute sound'}
       aria-pressed={sound}
     >
-      {arcadeMode ? '2 · ' : ''}
       {sound ? 'Muted' : 'Sound'}
     </SoundButton>
   );

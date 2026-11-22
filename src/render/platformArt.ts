@@ -101,35 +101,83 @@ export function platformMaterials() {
 }
 
 const posters = [
-  {
-    name: 'NIGHT MARKET',
-    line: 'FRIDAYS • LOWER EAST SIDE',
-    paper: '#2b2455',
-    ink: '#ffd769',
-    accent: '#ff6c91',
-  },
-  {
-    name: 'CITY SOUNDS',
-    line: 'LIVE JAZZ • WEST VILLAGE',
-    paper: '#e9ae57',
-    ink: '#302143',
-    accent: '#95455a',
-  },
-  {
-    name: 'FOLD COFFEE',
-    line: 'ESPRESSO • BROOKLYN',
-    paper: '#183e42',
-    ink: '#d7f1b8',
-    accent: '#74b6ad',
-  },
-  {
-    name: 'OPEN STUDIO',
-    line: 'PRINTMAKING • CHELSEA',
-    paper: '#aa423a',
-    ink: '#fff1cc',
-    accent: '#efb453',
-  },
+  ['NIGHT MARKET', 'FRIDAYS • LOWER EAST SIDE', '#2b2455', '#ffd769', '#ff6c91'],
+  ['CITY SOUNDS', 'LIVE JAZZ • WEST VILLAGE', '#e9ae57', '#302143', '#95455a'],
+  ['FOLD COFFEE', 'ESPRESSO • BROOKLYN', '#183e42', '#d7f1b8', '#74b6ad'],
+  ['OPEN STUDIO', 'PRINTMAKING • CHELSEA', '#aa423a', '#fff1cc', '#efb453'],
+  ['BOROUGH BOOKS', 'USED BOOKS • EAST HARLEM', '#ece2cd', '#192d41', '#b54142'],
+  ['OUT OF OFFICE', 'COMEDY • UNION SQUARE', '#261c22', '#ffe5fa', '#ec6b94'],
+  ['BACKSPIN', 'RECORDS • THE BRONX', '#142e66', '#fcf7dc', '#74d4ff'],
+  ['WINDOW SEAT', 'INDEPENDENT CINEMA', '#502157', '#fcea98', '#b87ab8'],
+  ['LATE SLICE', 'PIZZA BY THE SLICE', '#f6d34d', '#82253b', '#b54d6a'],
+  ['SECOND SHIFT', 'VINTAGE CLOTHING', '#1b493a', '#fff5db', '#b8e556'],
+  ['BLOCK PARTY', 'LIVE MUSIC • CROWN HEIGHTS', '#f08664', '#301e45', '#684196'],
+  ['EAST RIVER', 'KAYAK CLUB', '#c0e6f5', '#0d3757', '#37778b'],
+  ['FLUSHING FLORA', 'PLANTS • POTS • SOIL', '#4f2c36', '#fbeaa2', '#83bd6e'],
+  ['AFTER HOURS', 'DUMPLINGS • CHINATOWN', '#a8253a', '#fff4cf', '#e39c67'],
 ];
+
+function drawMotif(ctx: CanvasRenderingContext2D, design: number) {
+  switch (design % 7) {
+    case 0:
+      for (let i = 1; i <= 5; i++) {
+        ctx.beginPath();
+        ctx.ellipse(80, 85, 15 * i, 12 * i, -0.35, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      break;
+    case 1:
+      for (let i = 0; i < 5; i++) ctx.fillRect(14 + i * 24, 75 - i * 12, 13, 83 + i * 12);
+      break;
+    case 2:
+      ctx.beginPath();
+      ctx.arc(76, 83, 55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(76, 83, 23, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillRect(17, 80, 118, 6);
+      break;
+    case 3:
+      for (let i = 0; i < 7; i++) {
+        const dy = i * 12 + 31;
+
+        ctx.beginPath();
+        ctx.moveTo(7, dy);
+        ctx.bezierCurveTo(44, dy + 43, 105, dy - 43, 143, dy);
+        ctx.stroke();
+      }
+
+      break;
+    case 4:
+      ctx.translate(79, 82);
+
+      for (let i = 0; i < 12; i++) {
+        ctx.rotate(Math.PI / 6);
+        ctx.fillRect(26, -3, 47 - (i % 2) * 15, 6);
+      }
+
+      break;
+    case 5:
+      for (let i = 0; i < 4; i++) {
+        ctx.translate(18, 9);
+        ctx.strokeRect(0, 16, 83, 96);
+      }
+
+      break;
+    case 6:
+      for (let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, 118 + i * 12);
+        ctx.lineTo(78, 21 + i * 12);
+        ctx.lineTo(157, 118 + i * 12);
+        ctx.stroke();
+      }
+
+      break;
+  }
+}
 
 export function addPoster(
   parent: T.Object3D,
@@ -140,7 +188,10 @@ export function addPoster(
   height: number,
   index: number,
 ) {
-  const { name, line, paper, ink, accent } = posters[index % posters.length];
+  const design = index % posters.length;
+  const [name, line, paper, ink, accent] = posters[design];
+  const artOnLeft = design % 3 === 1;
+  const textX = artOnLeft ? 167 : 25;
   const map = canvasTexture(512, Math.round((512 * height) / width), (ctx) => {
     const h = ctx.canvas.height;
 
@@ -153,21 +204,25 @@ export function addPoster(
     ctx.beginPath();
     ctx.rect(9, 9, 494, h - 18);
     ctx.clip();
+    ctx.translate(artOnLeft ? 2 : 353, h * 0.14);
+    ctx.scale(1, h / 226);
     ctx.strokeStyle = accent;
-
-    for (let ring = 0; ring < 6; ring++) {
-      ctx.lineWidth = 7;
-      ctx.beginPath();
-      ctx.ellipse(426, h * 0.55, 30 + ring * 16, h * (0.13 + ring * 0.032), -0.5, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
+    ctx.fillStyle = accent;
+    ctx.lineWidth = 5.5;
+    drawMotif(ctx, design);
     ctx.restore();
+
     ctx.fillStyle = ink;
-    ctx.font = '900 61px system-ui, sans-serif';
-    ctx.fillText(name, 24, h * 0.49, 372);
+
+    ctx.font =
+      design % 4 === 2 ? 'italic 900 62px Georgia, serif' : '900 61px system-ui, sans-serif';
+
+    ctx.fillText(name, textX, h * 0.48, 321);
+
+    if (design % 4 === 0) ctx.fillRect(textX, h * 0.55, 54, 3);
+
     ctx.font = 'bold 25px monospace';
-    ctx.fillText(line, 26, h * 0.69, 335);
+    ctx.fillText(line, textX, h * 0.71, 310);
   });
   const mesh = new T.Mesh(
     new T.PlaneGeometry(width, height),

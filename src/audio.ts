@@ -24,6 +24,7 @@ const reactions: Partial<Record<Encounter, string>> = {
   weird: new URL('./assets/reaction-weird.mp3', import.meta.url).href,
   ac: new URL('./assets/reaction-ac.mp3', import.meta.url).href,
   shover: new URL('./assets/reaction-prank.mp3', import.meta.url).href,
+  sneezy: new URL('./assets/reaction-acrobat.mp3', import.meta.url).href,
   spreader: new URL('./assets/reaction-weird.mp3', import.meta.url).href,
 };
 
@@ -32,6 +33,7 @@ function isEncounter(cue: Cue): cue is Encounter {
 }
 
 const sampleFiles = {
+  sneeze: { url: new URL('./assets/sneeze.mp3', import.meta.url).href, volume: 0.82 },
   announcement: { url: new URL('./assets/announcement.mp3', import.meta.url).href, volume: 0.48 },
   chime: { url: new URL('./assets/chime.mp3', import.meta.url).href, volume: 0.61 },
   crazy: { url: new URL('./assets/crazy.mp3', import.meta.url).href, volume: 0.75 },
@@ -477,7 +479,10 @@ export class RideAudio {
     gain.gain.value = sampleFiles[cue].volume;
     player.connect(gain);
 
-    if (cue === 'speaker' && typeof context.createStereoPanner === 'function') {
+    if (
+      (cue === 'speaker' || cue === 'sneeze') &&
+      typeof context.createStereoPanner === 'function'
+    ) {
       const placement = context.createStereoPanner();
 
       placement.pan.value = Math.max(-1, Math.min(1, pan));

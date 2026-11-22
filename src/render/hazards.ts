@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { CAR_LENGTH, CAR_WIDTH } from '../sim/car.ts';
 import type { Ride } from '../sim/ride.ts';
 import { PA_FEEDBACK_SECONDS, SODA_RADIUS } from '../sim/hazards.ts';
 
@@ -11,6 +12,47 @@ function part(parent: T.Object3D, geometry: T.BufferGeometry, color: number) {
 }
 
 export function buildHazards(car: T.Object3D) {
+  const dangerUniforms = {
+    center: { value: new T.Vector2() },
+    room: { value: new T.Vector2(CAR_LENGTH, CAR_WIDTH) },
+    radius: { value: 0 },
+    pulse: { value: 0 },
+  };
+  const ripple = new T.Mesh(
+    new T.PlaneGeometry(CAR_LENGTH, CAR_WIDTH),
+    new T.ShaderMaterial({
+      uniforms: dangerUniforms,
+      transparent: true,
+      depthWrite: false,
+      vertexShader: `
+        varying vec2 floorUV;
+        void main() {
+          floorUV = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec2 floorUV;
+        uniform vec2 center;
+        uniform vec2 room;
+        uniform float radius;
+        uniform float pulse;
+        void main() {
+          float d = length((floorUV - 0.5) * room - center);
+          float rim = 1.0 - smoothstep(0.018, 0.058, abs(d - radius));
+          float wave = (1.0 - smoothstep(0.015, 0.095, abs(d - radius * pulse))) * (1.0 - pulse);
+          float field = (1.0 - smoothstep(0.0, radius, d)) * 0.20;
+          gl_FragColor = vec4(1.0, 0.105 + wave * 0.18, 0.075, max(rim * 0.88, max(wave * 0.95, field)));
+        }
+      `,
+    }),
+  );
+
+  ripple.rotation.x = -Math.PI / 2;
+  ripple.position.y = 0.012;
+  ripple.visible = false;
+  car.add(ripple);
+
   const speaker = new T.Group();
 
   part(speaker, new T.BoxGeometry(0.51, 0.29, 0.17), 0x283334);
@@ -88,6 +130,17 @@ export function buildHazards(car: T.Object3D) {
   return (ride: Ride) => {
     const event = ride.encounter;
     const location = event?.location;
+    const danger = ride.guestDanger;
+
+    ripple.visible = !!danger && ride.phase !== 'popped' && ride.time >= ride.shieldUntil;
+
+    if (danger) {
+      dangerUniforms.center.value.set(danger.x, -danger.z);
+      dangerUniforms.radius.value = danger.radius;
+      const began = event?.kind === 'sneezy' ? ride.sneeze?.at : event?.began;
+
+      dangerUniforms.pulse.value = ((ride.time - (began ?? ride.time)) * 0.98) % 1;
+    }
 
     speaker.visible = !!location && event?.kind === 'speaker';
     spill.visible = !!location && event?.kind === 'soda';

@@ -23,7 +23,6 @@ const steel = paint(0x8d9e9b, 0.62, 0.34);
 const darkSteel = paint(0x374849, 0.4);
 const panels = paint(0xd0d8cb);
 const seat = paint(0x478d88, 0.08, 0.38);
-const glass = paint(0x243a3c, 0.31);
 const windowGlass = new T.MeshStandardMaterial({
   color: 0x72998e,
   transparent: true,
@@ -92,6 +91,39 @@ function label(
   parent.add(mesh);
 
   return mesh;
+}
+
+function addLedDisplay(car: T.Object3D, x: number, y: number, z: number, message: string) {
+  const width = 1.39;
+  const height = 0.205;
+
+  box(car, ink, x, y, z, width + 0.07, height + 0.052, 0.047);
+
+  label(car, width, height, x, y, z + 0.027, '#231315', (ctx) => {
+    // Rasterize the letters at the LED pitch, then draw individual lit pixels.
+    const lettering = document.createElement('canvas');
+
+    lettering.width = 142;
+    lettering.height = 19;
+    const dots = lettering.getContext('2d')!;
+
+    dots.font = 'bold 12px monospace';
+    dots.textAlign = 'center';
+    dots.textBaseline = 'middle';
+    dots.fillText(message, lettering.width / 2, lettering.height / 2 + 0.4, 134);
+    const { data } = dots.getImageData(0, 0, lettering.width, lettering.height);
+    const pitchX = ctx.canvas.width / lettering.width;
+    const pitchY = ctx.canvas.height / lettering.height;
+
+    for (let row = 0; row < lettering.height; row++) {
+      for (let column = 0; column < lettering.width; column++) {
+        const lit = data[(row * lettering.width + column) * 4 + 3] > 73;
+
+        ctx.fillStyle = lit ? '#ff563e' : '#43211e';
+        ctx.fillRect(column * pitchX + 0.7, row * pitchY + 0.7, pitchX - 1.4, pitchY - 1.4);
+      }
+    }
+  });
 }
 
 export function buildCar(scene: T.Object3D) {
@@ -171,7 +203,7 @@ export function buildCar(scene: T.Object3D) {
   }
 
   for (const [index, x] of [-4.07, -1.34, 0.11, 1.36, 4.02].entries())
-    addPoster(car, x, 0.86, back + 0.089, 0.48, 0.27, index + 5);
+    addPoster(car, x, 0.86, back + 0.089, 0.48, 0.27, index + 9);
 
   for (const x of DOORS) {
     for (const sign of [-1, 1]) {
@@ -180,9 +212,17 @@ export function buildCar(scene: T.Object3D) {
       const rest = x + sign * 0.345;
 
       leaf.position.set(rest, 0, back + 0.01);
-      box(leaf, wall, 0, 0.957, 0, 0.682, 1.9, 0.086);
-      box(leaf, darkSteel, 0, 1.326, 0.05, 0.4, 0.57, 0.026);
-      box(leaf, glass, 0, 1.328, 0.067, 0.346, 0.51, 0.02);
+      // Frame an actual opening, with the platform visible through its pane.
+      box(leaf, wall, 0, 0.526, 0, 0.682, 1.038, 0.086);
+      box(leaf, wall, 0, 1.758, 0, 0.682, 0.298, 0.086);
+
+      for (const edge of [-1, 1]) {
+        box(leaf, wall, edge * 0.269, 1.328, 0, 0.144, 0.724, 0.086);
+        box(leaf, darkSteel, edge * 0.184, 1.328, 0.047, 0.034, 0.574, 0.021);
+        box(leaf, darkSteel, 0, 1.328 + edge * 0.272, 0.047, 0.4, 0.033, 0.021);
+      }
+
+      box(leaf, windowGlass, 0, 1.328, 0.044, 0.367, 0.533, 0.008);
       box(leaf, yellow, 0, 0.92, 0.06, 0.26, 0.034, 0.013);
       box(leaf, ink, sign * -0.328, 0.952, 0.051, 0.02, 1.89, 0.024);
       car.add(leaf);
@@ -223,12 +263,22 @@ export function buildCar(scene: T.Object3D) {
 
     box(car, ink, x, 0.75, 0, 0.38, 1.54, 1.04);
     box(car, darkSteel, body, -0.22, 0, 3.48, 0.42, 2.42);
-    box(car, steel, body, 2.06, 0, 3.48, 0.12, 2.35);
-    box(car, steel, body, 0.55, 1.13, 3.48, 1.12, 0.1);
-    box(car, panels, body, 1.04, -1.16, 3.48, 2, 0.13);
-    box(car, panels, x + sign * 0.13, 1.04, 0, 0.12, 2, 2.34);
-    box(car, glass, body, 1.44, 1.12, 1.19, 0.62, 0.07);
-    box(car, glass, body + sign * 0.98, 1.44, 1.12, 0.59, 0.62, 0.07);
+    box(car, wall, body, 2.078, 0, 3.48, 0.114, 2.4);
+
+    for (const side of [-1, 1]) {
+      box(car, wall, body, 1.027, side * 1.15, 3.48, 2.05, 0.13);
+      box(car, steel, body, 0.27, side * 1.222, 3.46, 0.021, 0.012);
+      box(car, steel, body, 1.89, side * 1.222, 3.46, 0.015, 0.012);
+      box(car, wall, body + side * 1.681, 1.022, 0, 0.116, 2.05, 2.4);
+    }
+
+    addLedDisplay(
+      car,
+      x + sign * 0.93,
+      1.56,
+      1.232,
+      sign < 0 ? 'NEXT STOP: YOUR NAP' : 'DELAYED BY A BAGEL',
+    );
   }
 
   return (door: number) => {
@@ -236,7 +286,7 @@ export function buildCar(scene: T.Object3D) {
   };
 }
 
-function buildPlatform(scene: T.Scene) {
+function buildPlatform(scene: T.Scene, posterOffset: number) {
   const platform = new T.Group();
 
   scene.add(platform);
@@ -252,7 +302,7 @@ function buildPlatform(scene: T.Scene) {
   for (let index = -6; index <= 6; index++) {
     const x = index * 2.08 + 0.48;
 
-    addPoster(platform, x, 1.62, -3.65, 0.99, 0.56, index + 8);
+    addPoster(platform, x, 1.62, -3.65, 0.99, 0.56, index + 8 + posterOffset);
 
     if (index % 2 === 0) {
       box(platform, darkSteel, x - 0.64, 0.23, -3.24, 0.42, 0.46, 0.35);
@@ -302,7 +352,7 @@ function buildPlatform(scene: T.Scene) {
 }
 
 export function buildTrack(scene: T.Scene) {
-  const platforms = [buildPlatform(scene), buildPlatform(scene)];
+  const platforms = [buildPlatform(scene, 0), buildPlatform(scene, 5)];
   const track = new T.Group();
 
   scene.add(track);
