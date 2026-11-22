@@ -10,13 +10,55 @@ const palettes: Record<Exclude<Power, 'shield'>, number[]> = {
   annoy: [0xff834e, 0xffdb62, 0xf15b4d, 0xff9c73, 0xffef9e],
   candy: [0xff76b3, 0xffc26d, 0xddabff, 0x93ebd2, 0xfff19a],
   express: [0xffcf58, 0xffe694, 0xffa858, 0xffffaf, 0xfff8d2],
-  fan: [0x67dcca, 0xa1f9dd, 0x7ff2eb, 0xc7fff3, 0x74c7ef],
   vomit: [0x96f032, 0xd5fb5a, 0x54d04d, 0xe9f977, 0x8bd931],
 };
 
 export function buildPowerEffects(scene: T.Object3D) {
   const group = new T.Group();
   const chunk = new T.IcosahedronGeometry(1, 0);
+  const flake = new T.Shape();
+
+  for (let tip = 0; tip < 24; tip++) {
+    const angle = (tip / 24) * Math.PI * 2;
+    const radius = tip % 4 === 0 ? 1 : tip % 2 === 0 ? 0.49 : 0.27;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+
+    if (tip === 0) flake.moveTo(x, y);
+    else flake.lineTo(x, y);
+  }
+
+  flake.closePath();
+  const snow = new T.ShapeGeometry(flake);
+  const alarm = new T.Group();
+  const beacon = new T.Mesh(
+    new T.CylinderGeometry(0.115, 0.14, 0.2, 10),
+    new T.MeshBasicMaterial({ color: 0xff6b3d }),
+  );
+  const cap = new T.Mesh(
+    new T.CylinderGeometry(0.101, 0.113, 0.056, 10),
+    new T.MeshBasicMaterial({ color: 0xfcc875 }),
+  );
+
+  cap.position.y = 0.124;
+  alarm.add(beacon, cap);
+  const waves = Array.from({ length: 3 }, () => {
+    const wave = new T.Mesh(
+      new T.RingGeometry(0.87, 1, 38),
+      new T.MeshBasicMaterial({
+        color: 0xffbc5b,
+        side: T.DoubleSide,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+
+    alarm.add(wave);
+
+    return wave;
+  });
+
+  group.add(alarm);
   const ring = new T.Mesh(
     new T.TorusGeometry(1, 0.023, 7, 32),
     new T.MeshBasicMaterial({ color: 0xfedc84, transparent: true, depthWrite: false }),
@@ -25,9 +67,9 @@ export function buildPowerEffects(scene: T.Object3D) {
   ring.rotation.x = -Math.PI / 2;
   group.add(ring);
   const particles = Array.from({ length: 28 }, () => {
-    const particle = new T.Mesh(
+    const particle = new T.Mesh<T.BufferGeometry, T.MeshBasicMaterial>(
       chunk,
-      new T.MeshBasicMaterial({ transparent: true, depthWrite: false }),
+      new T.MeshBasicMaterial({ transparent: true, depthWrite: false, side: T.DoubleSide }),
     );
 
     group.add(particle);
@@ -35,7 +77,13 @@ export function buildPowerEffects(scene: T.Object3D) {
     return particle;
   });
 
-  scene.add(group);
+  const spareGeometry = new T.Mesh(snow, particles[0].material);
+
+  spareGeometry.visible = false;
+  const spareChunk = new T.Mesh(chunk, particles[0].material);
+
+  spareChunk.visible = false;
+  scene.add(group, spareGeometry, spareChunk);
 
   return (ride: Ride) => {
     const { animation, time, fluid } = ride;
@@ -57,7 +105,23 @@ export function buildPowerEffects(scene: T.Object3D) {
 
     group.position.set(origin.x, 0, origin.z);
     group.rotation.y = mode === 'vomit' ? animation.facing : 0;
-    ring.visible = mode !== 'vomit';
+    ring.visible = mode !== 'vomit' && mode !== 'cool' && mode !== 'annoy';
+    alarm.visible = mode === 'annoy';
+
+    if (alarm.visible) {
+      alarm.position.set(0, 1.79 + 0.115 * Math.sin(age * 9), 0.24);
+      alarm.rotation.y = 0.15 * Math.sin(age * 14);
+      beacon.material.color.setHex(Math.sin(age * 29) > 0 ? 0xff3f2a : 0xff9e32);
+
+      for (const [index, wave] of waves.entries()) {
+        const pulse = (age * 1.9 + index / waves.length) % 1;
+
+        wave.position.set(0, 0, 0.1 + pulse * 0.21);
+        wave.scale.setScalar(0.21 + pulse * 0.88);
+        wave.material.opacity = (1 - pulse) * (1 - progress) * 0.9;
+      }
+    }
+
     ring.scale.setScalar(0.22 + 1.58 * Math.min(1, progress * 1.35));
     ring.material.color.setHex(palette[1]);
     ring.material.opacity = (1 - progress) * 0.72;
@@ -68,12 +132,25 @@ export function buildPowerEffects(scene: T.Object3D) {
       const burst = Math.max(0, age - (index % 7) * 0.055);
       const radius = Math.min(1.4, burst * (0.38 + (index % 6) * 0.12));
 
-      particle.visible = burst > 0;
+      particle.visible = burst > 0 && mode !== 'annoy';
+      particle.geometry = mode === 'cool' ? snow : chunk;
       particle.material.color.setHex(palette[index % palette.length]);
       particle.material.opacity = (1 - progress) * (mode === 'fart' ? 0.74 : 1);
       particle.rotation.set(age * (4 + (index % 3)), angle, age * 4 + index);
 
-      if (mode !== 'fart' && mode !== 'vomit') {
+      if (mode === 'cool') {
+        const drift = 0.22 + (index % 7) * 0.08;
+
+        particle.position.set(
+          Math.cos(angle) * drift + 0.09 * Math.sin(age * 5 + index),
+          1.95 + (index % 6) * 0.08 - burst * (0.46 + (index % 4) * 0.14),
+          Math.sin(angle) * drift + 0.14,
+        );
+
+        particle.material.color.setHex(index % 4 ? 0xf9fcff : 0xa8ddff);
+        particle.rotation.set(0.18 * Math.sin(angle), 0.28, angle + age * 1.4);
+        particle.scale.setScalar((0.052 + (index % 5) * 0.011) * (1 - progress * 0.42));
+      } else if (mode !== 'fart' && mode !== 'vomit') {
         particle.position.set(
           Math.cos(angle) * radius,
           0.18 + (index % 8) * 0.23 + Math.sin(age * 5 + index) * 0.16,

@@ -70,7 +70,7 @@ export class Crowd {
     this.onboard = this.riders.length;
   }
 
-  prepare(stop: number, encounter?: Encounter) {
+  prepare(stop: number, encounter?: Encounter, guest?: Location) {
     const departures = stop < 14 ? 2 : 4;
     const leaving = this.riders.filter((rider) => rider.wantsExit);
     const regular = this.riders
@@ -105,23 +105,13 @@ export class Crowd {
       };
 
       if (index === 0 && encounter && hasGuest(encounter)) {
-        const x =
-          encounter === 'spreader'
-            ? SPREADER_X
-            : encounter === 'acrobat'
-              ? 1.7
-              : encounter === 'prank'
-                ? -0.38
-                : 0.03;
-        const z =
-          encounter === 'spreader'
-            ? SPREADER_Z
-            : encounter === 'acrobat'
-              ? 0.13
-              : encounter === 'prank'
-                ? 0.39
-                : 0.42;
+        const { x, z } =
+          guest ?? (encounter === 'spreader' ? { x: SPREADER_X, z: SPREADER_Z } : slot);
+        const entry = this.door(x);
 
+        rider.x = entry;
+        rider.trajectory.points[0] = { x: entry, z: start.z };
+        rider.trajectory.points[1] = { x: entry, z: lane };
         rider.role = encounter;
         rider.prop = undefined;
         rider.slot = { ...slot, x, z };
@@ -183,9 +173,9 @@ export class Crowd {
     doors: boolean,
     facing = 0,
   ) {
-    const radius = { crazy: 2.35, fart: 2, vomit: 1.95, annoy: 2.6, candy: 2.65, fan: 1.3 }[power];
-    const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, candy: 0, fan: 0 }[power];
-    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: CANDY_SECONDS, fan: 7 }[power];
+    const radius = { crazy: 2.35, fart: 2, vomit: 1.95, annoy: 2.6, candy: 2.65 }[power];
+    const exits = { crazy: 3, fart: 2, vomit: 3, annoy: 2, candy: 0 }[power];
+    const duration = { crazy: 5, fart: 6, vomit: 8, annoy: 9, candy: CANDY_SECONDS }[power];
 
     const distance = (rider: Rider) => Math.hypot(rider.x - from.x, rider.z - from.z);
 
@@ -472,8 +462,8 @@ export class Crowd {
       if (role === 'spreader' && !trajectory) {
         grid.block(
           mask,
-          { x: x - 0.23, y: 0.47, z: z - 0.13 },
-          { x: x + 0.23, y: 1.38, z: z + 0.22 },
+          { x: x - 0.23, y: 0.47, z: z - 0.22 },
+          { x: x + 0.23, y: 1.38, z: z + 0.13 },
         );
 
         for (const side of [-1, 1]) {
@@ -481,12 +471,12 @@ export class Crowd {
 
           grid.block(
             mask,
-            { x: knee - 0.18, y: 0, z: z + 0.25 },
-            { x: knee + 0.18, y: 0.61, z: z + 0.78 },
+            { x: knee - 0.18, y: 0, z: z - 0.78 },
+            { x: knee + 0.18, y: 0.61, z: z - 0.25 },
           );
         }
 
-        grid.block(mask, { x: x - 0.47, y: 0.38, z }, { x: x + 0.47, y: 0.59, z: z + 0.48 });
+        grid.block(mask, { x: x - 0.47, y: 0.38, z: z - 0.48 }, { x: x + 0.47, y: 0.59, z });
 
         continue;
       }

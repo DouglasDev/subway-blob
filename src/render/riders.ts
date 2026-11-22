@@ -98,7 +98,7 @@ export function buildRiders(scene: T.Object3D) {
 
       if (seated) {
         person.position.y = -0.25;
-        person.rotation.y = 0;
+        person.rotation.y = Math.PI;
       }
 
       if (pushing && shove) {

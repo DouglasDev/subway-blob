@@ -10,7 +10,6 @@ const catalog = {
   shield: { name: 'Quiet Bubble', color: 0x70a8ff, weight: 1 },
   express: { name: 'Speed Boost', color: 0xffdc73, weight: 2 },
   fluid: { name: 'Super Fluid', color: 0x7affdf, weight: 2 },
-  fan: { name: 'Pocket Fan', color: 0x72e6c6, weight: 2 },
 } as const;
 
 export type Power = keyof typeof catalog;

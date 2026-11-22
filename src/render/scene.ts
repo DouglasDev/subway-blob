@@ -203,8 +203,11 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
         performer &&
         (performer.role === 'prank' ||
           performer.role === 'acrobat' ||
-          performer.role === 'musician');
-      const focusX = stageFocus ? ride.fluid.x * 0.56 + performer.x * 0.23 : ride.fluid.x * 0.74;
+          performer.role === 'musician' ||
+          performer.role === 'spreader');
+      const focusX = stageFocus
+        ? ride.fluid.x * 0.56 + performer.x * (performer.role === 'spreader' ? 0.39 : 0.23)
+        : ride.fluid.x * 0.74;
 
       goal.set(focusX, 0.85, (ride.fluid.z - 0.32) * 0.5);
       focus.lerp(goal, 1 - Math.exp(-4 * dt));

@@ -14,11 +14,7 @@ export const Shell = styled.main`
     flex-direction: column;
     min-height: 100svh;
     min-height: 100dvh;
-    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
-
-    @media (orientation: landscape) and (max-height: 500px) {
-      padding-block: 4px max(4px, env(safe-area-inset-bottom));
-    }
+    padding: 0;
   }
 
   html[data-arcade='true'] & {
@@ -42,9 +38,14 @@ export const Header = styled.header`
     margin-bottom: 12px;
   }
 
+  &[data-touch='true'] {
+    padding: 5px 8px;
+    margin: 0;
+  }
+
   @media (orientation: landscape) and (max-height: 500px) {
     &[data-touch='true'] {
-      margin-bottom: 5px;
+      padding-block: 2px;
     }
   }
 
@@ -80,7 +81,7 @@ export const Bullet = styled.span`
   width: 2.35rem;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #008653;
+  background: #00933c;
   color: #fff6e7;
   font-weight: 790;
   font-size: 1.55rem;
@@ -118,7 +119,7 @@ export const Title = styled.h1`
 export const Line = styled.div`
   margin-top: 4px;
   font: 0.68rem var(--mono);
-  color: #aeb9ac;
+  color: #c3cad1;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 
@@ -144,7 +145,7 @@ export const Best = styled.div`
   gap: 4px;
   white-space: nowrap;
   font-family: var(--mono);
-  color: #aeb9ac;
+  color: #c3cad1;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -181,15 +182,17 @@ export const BestValue = styled.strong`
 
 export const Game = styled.section`
   overflow: hidden;
-  border: 1px solid #3b4b44;
+  border: 1px solid #5a6167;
   border-radius: 13px;
-  background: #182320;
+  background: #111316;
   box-shadow: 0 20px 55px #0b16148c;
 
   &[data-touch='true'] {
     display: flex;
     flex: 1;
     flex-direction: column;
+    border: 0;
+    border-radius: 0;
   }
 
   html[data-arcade='true'] & {
@@ -207,8 +210,8 @@ export const Route = styled.div`
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   padding: 11px 22px 13px;
-  background: #21312b;
-  border-bottom: 1px solid #405049;
+  background: #15171a;
+  border-bottom: 1px solid #545a60;
 
   @media (max-width: 600px) {
     gap: 4px;
@@ -248,12 +251,12 @@ export const Stop = styled.div`
   min-width: 0;
   display: grid;
   gap: var(--stop-gap, 4px);
-  color: #bac6b8;
+  color: #c8cdd2;
   font-size: clamp(0.73rem, 1.3vw, 0.91rem);
   text-align: center;
 
   &[data-current='true'] {
-    color: #f1f0db;
+    color: #ffffff;
     font-weight: 700;
   }
 
@@ -296,7 +299,7 @@ export const RouteDot = styled.span`
     position: absolute;
     content: '';
     height: 2px;
-    background: #467d63;
+    background: #508160;
     inset-inline: -6px;
     top: calc(50% - 1px);
   }
@@ -306,17 +309,17 @@ export const RouteDot = styled.span`
     content: '';
     height: 7px;
     width: 7px;
-    border: 2px solid #75b188;
+    border: 2px solid #8fbd9c;
     border-radius: 50%;
-    background: #21312b;
+    background: #15171a;
   }
 
   &[data-current='true']::after {
     width: 9px;
     height: 9px;
-    background: #59b476;
+    background: #00933c;
     border-color: #a8dbac;
-    box-shadow: 0 0 0 3px #21312b;
+    box-shadow: 0 0 0 3px #15171a;
   }
 
   html[data-arcade='true'] & {
@@ -361,45 +364,6 @@ export const View = styled.canvas`
   display: block;
   width: 100%;
   height: 100%;
-`;
-
-export const Status = styled.div`
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #152420e8;
-  border: 1px solid #687d6e;
-  border-radius: 4px;
-  padding: 7px 10px;
-  font: 0.67rem var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #eeead3;
-
-  &::before {
-    content: '';
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #bee572;
-    box-shadow: 0 0 7px #b6e55c9a;
-  }
-
-  &[data-doors='true']::before {
-    background: #ffc779;
-    box-shadow: 0 0 7px #ffc779ad;
-  }
-
-  html[data-arcade='true'] & {
-    top: 5px;
-    left: 5px;
-    padding: 3px 5px;
-    font-size: 9px;
-    gap: 4px;
-  }
 `;
 
 export const Flow = styled.div`
@@ -450,9 +414,9 @@ export const Overlay = styled.div`
 
 export const Card = styled.div`
   pointer-events: auto;
-  background: #182620f2;
+  background: #101216f2;
   width: min(100%, 460px);
-  border: 1px solid #77856e;
+  border: 1px solid #8c969f;
   border-radius: 8px;
   color: #f1efdb;
   padding: 16px 17px 16px 19px;
@@ -484,7 +448,7 @@ export const Card = styled.div`
 export const Prompt = styled.div`
   display: grid;
   gap: 4px;
-  color: #c9d1be;
+  color: #dce1e6;
   font-size: 0.81rem;
   line-height: 1.4;
 
@@ -495,7 +459,7 @@ export const Prompt = styled.div`
 `;
 
 export const PromptTitle = styled.strong`
-  color: #f2efde;
+  color: #ffffff;
   font-size: 1.11rem;
   letter-spacing: -0.025em;
   line-height: 1.2;
@@ -506,10 +470,10 @@ export const PromptTitle = styled.strong`
 `;
 
 export const Button = styled.button`
-  border: 1px solid #d2ed9c;
+  border: 1px solid #ffffff;
   border-radius: 4px;
-  background: #c2e984;
-  color: #20311f;
+  background: #e7edf6;
+  color: #071933;
   padding: 10px 13px;
   min-height: 42px;
   flex: none;
@@ -517,7 +481,7 @@ export const Button = styled.button`
   cursor: pointer;
 
   &:hover {
-    background: #def3b3;
+    background: #ffffff;
   }
 
   &[data-touch='true'] {
@@ -537,7 +501,7 @@ export const Dashboard = styled.div`
   display: grid;
   grid-template-columns: auto auto minmax(125px, 1fr) auto;
   align-items: center;
-  background: #202e27;
+  background: #131619;
   border-top: 1px solid #4a5a4d;
 
   @media (max-width: 730px) {
@@ -559,7 +523,7 @@ export const Metric = styled.div`
   gap: 4px;
   min-width: 116px;
   padding: 11px 16px;
-  border-right: 1px solid #3f5045;
+  border-right: 1px solid #3e444a;
 
   @media (max-width: 730px) {
     min-width: 0;
@@ -585,7 +549,7 @@ export const Metric = styled.div`
 `;
 
 export const MetricName = styled.span`
-  color: #b8c4b6;
+  color: #c7cdd3;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font: 0.64rem var(--mono);
@@ -699,15 +663,17 @@ export const GaugeBar = styled.progress`
 
 export const Controls = styled.div`
   padding: 9px 15px;
-  border-left: 1px solid #3f5045;
+  border-left: 1px solid #3e444a;
   display: flex;
   align-items: center;
   gap: 8px;
   color: #d4ddcb;
   font-size: 0.75rem;
 
-  @media (max-width: 730px), (pointer: coarse) {
-    display: none;
+  @media (max-width: 730px) {
+    grid-column: 1 / -1;
+    padding-block: 4px;
+    border-left: 0;
   }
 
   html[data-arcade='true'] & {
@@ -726,9 +692,9 @@ export const Keys = styled.kbd`
 export const SoundButton = styled.button`
   min-height: 42px;
   padding: 5px 9px;
-  background: #20382e;
-  color: #e6eddb;
-  border: 1px solid #607e6a;
+  background: #063e80;
+  color: #ffffff;
+  border: 1px solid #598dc9;
   border-radius: 4px;
   font: 0.69rem var(--mono);
   cursor: pointer;
@@ -757,7 +723,7 @@ export const Inventory = styled.div`
   display: flex;
   gap: 7px;
   padding: 6px 12px;
-  background: #1b2a23;
+  background: #15171b;
   border-top: 1px solid #3c5246;
 
   html[data-arcade='true'] & {
@@ -772,8 +738,8 @@ export const InventorySlot = styled.button`
   min-width: 0;
   min-height: 44px;
   padding: 4px 8px;
-  background: #384f36;
-  border: 1px solid #789968;
+  background: #154f8f;
+  border: 1px solid #6199da;
   border-radius: 4px;
   color: #eef1dc;
   text-align: left;
@@ -782,7 +748,7 @@ export const InventorySlot = styled.button`
   touch-action: manipulation;
 
   &:disabled {
-    background: #24332d;
+    background: #282d34;
     border-color: #4c5c53;
     color: #b3c2b4;
     cursor: default;
@@ -800,7 +766,7 @@ export const InventoryKey = styled.kbd`
   padding: 1px 4px;
   margin-right: 4px;
   color: #f3f2d8;
-  background: #16241c;
+  background: #0f2037;
   border-radius: 2px;
   font: 0.65rem var(--mono);
 
@@ -812,7 +778,7 @@ export const InventoryKey = styled.kbd`
 export const EncounterNotice = styled.div`
   position: absolute;
   left: 16px;
-  top: 51px;
+  top: 15px;
   background: #493528ee;
   color: #fae7b6;
   border: 1px solid #926d4e;
@@ -829,7 +795,7 @@ export const EncounterNotice = styled.div`
 
   html[data-arcade='true'] & {
     left: 5px;
-    top: 27px;
+    top: 5px;
     padding: 3px 4px;
     font-size: 8px;
   }

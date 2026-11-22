@@ -13,6 +13,7 @@ import {
 } from '../sim/car.ts';
 import { STATIONS, stationIndex, travelDirection } from '../sim/route.ts';
 import { addPoster, platformMaterials } from './platformArt';
+import { interiorMaterials } from './interiorMaterials';
 import { buildPlatformPeople } from './platformPeople';
 
 const paint = (color: number, metalness = 0, roughness = 0.72) =>
@@ -23,7 +24,6 @@ const darkSteel = paint(0x374849, 0.4);
 const panels = paint(0xd0d8cb);
 const seat = paint(0x478d88, 0.08, 0.38);
 const glass = paint(0x243a3c, 0.31);
-const floor = paint(0x515d53);
 const windowGlass = new T.MeshStandardMaterial({
   color: 0x72998e,
   transparent: true,
@@ -97,6 +97,7 @@ function label(
 export function buildCar(scene: T.Object3D) {
   const car = new T.Group();
   const back = -CAR_WIDTH / 2;
+  const { floor, wall } = interiorMaterials();
   const leaves: { mesh: T.Group; x: number; sign: number }[] = [];
 
   scene.add(car);
@@ -112,16 +113,18 @@ export function buildCar(scene: T.Object3D) {
     const opening = Math.min(length - 0.27, 3.29);
     const jamb = (length - opening) / 2;
 
-    box(car, panels, x, 0.62, back, length, 1.02, 0.13);
-    box(car, panels, x, 1.775, back, length, 0.25, 0.13);
+    box(car, wall, x, 0.62, back, length, 1.02, 0.13);
+    box(car, wall, x, 1.775, back, length, 0.25, 0.13);
 
     for (const side of [-1, 1]) {
-      box(car, panels, x + (side * (length - jamb)) / 2, 1.39, back, jamb, 0.52, 0.13);
+      box(car, wall, x + (side * (length - jamb)) / 2, 1.39, back, jamb, 0.52, 0.13);
     }
 
     for (const y of [1.125, 1.645]) {
       box(car, ink, x, y, back + 0.074, opening, 0.042, 0.032);
     }
+
+    for (const y of [0.41, 0.5, 1.069]) box(car, steel, x, y, back + 0.071, length, 0.013, 0.014);
 
     box(car, windowGlass, x, 1.385, back + 0.07, opening, 0.51, 0.015);
 
@@ -159,9 +162,16 @@ export function buildCar(scene: T.Object3D) {
     box(car, crossSeat, seatBack, 0.735, z, CROSS_BACK, 0.53, CROSS_WIDTH);
   }
 
-  for (const [index, x] of [-3.95, -1.55, 1.55, 3.95].entries()) {
-    addPoster(car, x, 1.82, back + 0.086, 0.64, 0.29, index);
+  for (const [index, x] of [-4.41, -3.68, -1.61, -0.82, 0, 0.82, 1.61, 3.68, 4.41].entries()) {
+    const width = Math.abs(x) < 1.05 ? 0.66 : 0.63;
+    const y = Math.abs(x) < 1.05 ? 1.76 : 1.8;
+
+    box(car, darkSteel, x, y, back + 0.081, width + 0.04, 0.252, 0.024);
+    addPoster(car, x, y, back + 0.102, width, 0.222, index);
   }
+
+  for (const [index, x] of [-4.07, -1.34, 0.11, 1.36, 4.02].entries())
+    addPoster(car, x, 0.86, back + 0.089, 0.48, 0.27, index + 5);
 
   for (const x of DOORS) {
     for (const sign of [-1, 1]) {
@@ -170,7 +180,7 @@ export function buildCar(scene: T.Object3D) {
       const rest = x + sign * 0.345;
 
       leaf.position.set(rest, 0, back + 0.01);
-      box(leaf, steel, 0, 0.957, 0, 0.682, 1.9, 0.086);
+      box(leaf, wall, 0, 0.957, 0, 0.682, 1.9, 0.086);
       box(leaf, darkSteel, 0, 1.326, 0.05, 0.4, 0.57, 0.026);
       box(leaf, glass, 0, 1.328, 0.067, 0.346, 0.51, 0.02);
       box(leaf, yellow, 0, 0.92, 0.06, 0.26, 0.034, 0.013);

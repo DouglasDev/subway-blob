@@ -45,7 +45,6 @@ import {
   RouteLabel,
   Shell,
   Stage,
-  Status,
   Stop,
   StopName,
   Title,
@@ -72,9 +71,7 @@ function soundMuted() {
 }
 
 const compactRoute = window.matchMedia('(max-width: 520px)');
-const touchQuery = window.matchMedia(
-  '(max-width: 730px), (pointer: coarse), (orientation: landscape) and (max-height: 500px) and (max-width: 950px)',
-);
+const touchQuery = window.matchMedia('(any-pointer: coarse)');
 
 function subscribeToTouchLayout(update: () => void) {
   touchQuery.addEventListener('change', update);
@@ -93,7 +90,7 @@ function getCompactRoute() {
 }
 
 function getTouchLayout() {
-  return !arcadeMode && touchQuery.matches;
+  return !arcadeMode && (navigator.maxTouchPoints > 0 || touchQuery.matches);
 }
 
 const keyDirection: Record<string, string> = {
@@ -105,15 +102,6 @@ const keyDirection: Record<string, string> = {
   ArrowUp: 'up',
   KeyS: 'down',
   ArrowDown: 'down',
-};
-
-const phaseText: Record<Phase, string> = {
-  ready: 'At platform',
-  arriving: 'Arriving',
-  doors: 'Doors open',
-  closing: 'Doors closing',
-  running: 'In transit',
-  popped: 'Ride ended',
 };
 
 function loadBest() {
@@ -132,7 +120,7 @@ function snapshot(ride: Ride) {
     onboard: ride.crowd.onboard,
     boarded: ride.crowd.boarded,
     exited: ride.crowd.exited,
-    tolerance: Math.round(ride.tolerance * 100),
+    squished: Math.floor((1 - ride.tolerance) * 100 + 1e-9),
     encounter: ride.encounter?.kind,
     inventory: [...ride.inventory],
     speech: ride.speech,
@@ -144,9 +132,7 @@ function snapshot(ride: Ride) {
           ? ('fluid' as const)
           : ride.expressUntil > ride.time
             ? ('express' as const)
-            : ride.fanUntil > ride.time
-              ? ('fan' as const)
-              : undefined,
+            : undefined,
     variant: ride.encounter?.variant ?? 0,
     squeeze: ride.squeeze,
     sticky: ride.sticky,
@@ -352,7 +338,7 @@ export function App() {
         ride.encounter?.variant,
       );
 
-      audio.travel(ride.phase === 'running', ride.renderTravel);
+      audio.travel(ride.phase === 'running', ride.renderSpeed);
 
       for (const cue of ride.cues.splice(0)) {
         const source = cue === 'speaker' ? ride.encounter?.location : undefined;
@@ -490,9 +476,6 @@ export function App() {
             ref={canvas}
             aria-label="3D view of the subway car and your blob"
           />
-          <Status data-doors={hud.phase === 'doors' || hud.phase === 'closing'} role="status">
-            {phaseText[hud.phase]}
-          </Status>
           {(hud.phase === 'doors' || hud.phase === 'closing') && (
             <Flow>
               −{hud.exited} exiting · +{hud.boarded} boarding
@@ -532,8 +515,8 @@ export function App() {
                     : result
                       ? `${STATIONS[stationIndex(hud.stop)]} · ${hud.score} ${hud.score === 1 ? 'stop' : 'stops'} survived`
                       : arcadeMode
-                        ? 'Joystick to steer'
-                        : 'Steer into open gaps before riders crowd you out.'}
+                        ? 'Find a gap. Grab a power-up. Pop at 100%.'
+                        : 'You’re the gap filler. Slip between riders, grab power-ups, and stay below 100% Squished.'}
                 </Prompt>
                 {!touchLayout && startButton}
               </Card>
@@ -553,12 +536,12 @@ export function App() {
           <Gauge data-touch={touchLayout}>
             <GaugeCaption>
               <MetricName>Squished</MetricName>
-              <GaugeValue>{hud.tolerance}%</GaugeValue>
+              <GaugeValue>{hud.squished}%</GaugeValue>
             </GaugeCaption>
             <GaugeBar
               max={100}
-              value={hud.tolerance}
-              data-high={hud.tolerance < 35 || hud.squeeze >= 0.75}
+              value={hud.squished}
+              data-high={hud.squished >= 65 || hud.squeeze >= 0.75}
               aria-label="Squished"
             />
           </Gauge>
@@ -595,7 +578,7 @@ export function App() {
                   onClick={() => ride.usePower(slot === 0 ? 0 : 1)}
                 >
                   <InventoryKey>{key}</InventoryKey> {power ? POWERS[power].name : 'Empty'}
-                  {power === 'cool' && ` · +${COOL_POINTS} meter points`}
+                  {power === 'cool' && ` · −${COOL_POINTS} Squished`}
                 </InventorySlot>
               );
             })}

@@ -1,4 +1,4 @@
-export const SODA_RADIUS = 0.64;
+export const SODA_RADIUS = 0.87;
 
 export const SODA_SPEED = 0.46;
 
@@ -8,9 +8,9 @@ export const SHOVE_RANGE = 0.71;
 
 export const SHOVE_DURATION = 0.42;
 
-export const SPREADER_X = -3.86;
+export const SPREADER_X = 3.56;
 
-export const SPREADER_Z = -0.99;
+export const SPREADER_Z = 0.99;
 
 export const RHINO_PRANK = 5;
 

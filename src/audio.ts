@@ -77,10 +77,6 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
     { at: 0.24, length: 0.39, pitch: 740, end: 1100 },
   ],
   express: [{ at: 0, length: 0.6, pitch: 110, end: 482, shape: 'sawtooth' }],
-  fan: [
-    { at: 0, length: 0.8, pitch: 342, end: 211 },
-    { at: 0.12, length: 0.6, pitch: 675, end: 520 },
-  ],
   fluid: [
     { at: 0, length: 0.28, pitch: 330, end: 990 },
     { at: 0.22, length: 0.6, pitch: 790, end: 270 },
@@ -89,10 +85,10 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
     { at: 0, length: 0.15, pitch: 1100, end: 450 },
     { at: 0.11, length: 0.43, pitch: 460, end: 140 },
   ],
-  trackJolt: [{ at: 0, length: 0.22, pitch: 135, end: 37 }],
+  trackJolt: [{ at: 0, length: 0.22, pitch: 71, end: 35 }],
   brakeJolt: [
-    { at: 0, length: 0.42, pitch: 152, end: 31 },
-    { at: 0.06, length: 0.28, pitch: 720, end: 160 },
+    { at: 0, length: 0.42, pitch: 76, end: 29 },
+    { at: 0.06, length: 0.28, pitch: 134, end: 48 },
   ],
   shove: [{ at: 0, length: 0.2, pitch: 205, end: 75 }],
   rhino: [
@@ -107,8 +103,8 @@ const sounds: Partial<Record<Cue, Tone[]>> = {
 
 const impacts: Partial<Record<Cue, readonly [number, number, number]>> = {
   pop: [0.49, 1450, 0.37],
-  trackJolt: [0.19, 610, 0.16],
-  brakeJolt: [0.41, 920, 0.24],
+  trackJolt: [0.25, 290, 0.19],
+  brakeJolt: [0.52, 360, 0.25],
   soda: [0.26, 3250, 0.11],
   shove: [0.16, 860, 0.21],
   rhino: [0.24, 410, 0.16],
@@ -134,6 +130,8 @@ export class RideAudio {
     reactions.takes!,
     reactions.weird!,
     reactions.ac!,
+    new URL('./assets/brooklyn-complaint.mp3', import.meta.url).href,
+    new URL('./assets/brooklyn-figures.mp3', import.meta.url).href,
   ].map((url) => clip(url, 0.31));
   private murmurIndex = -1;
   private readonly effects = {
@@ -193,11 +191,12 @@ export class RideAudio {
       this.bus.gain.setTargetAtTime(muted ? 0 : 1, this.context.currentTime, 0.035);
   }
 
-  travel(running: boolean, progress: number) {
+  travel(running: boolean, speed: number) {
     if (running === this.rolling) {
-      if (running)
-        this.roll.volume =
-          (0.11 + Math.sin(Math.PI * progress) * 0.32) * (this.activePerformance ? 0.55 : 1);
+      if (running) {
+        this.roll.volume = (0.08 + speed * 0.35) * (this.activePerformance ? 0.55 : 1);
+        this.roll.playbackRate = 0.75 + 0.27 * speed;
+      }
 
       return;
     }

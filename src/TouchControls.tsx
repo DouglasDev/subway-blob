@@ -18,8 +18,9 @@ const Deck = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 8px 12px;
-  padding: 8px clamp(8px, 3vw, 20px);
-  background: #1b2a23;
+  padding: 5px clamp(9px, 3vw, 20px) 3px;
+  touch-action: none;
+  background: #101317;
   border-top: 1px solid #475b4f;
   user-select: none;
 
@@ -36,9 +37,9 @@ const Stick = styled.div`
   place-items: center;
   width: 106px;
   height: 106px;
-  border: 2px solid #506456;
+  border: 2px solid #62686d;
   border-radius: 50%;
-  background: #17241e;
+  background: #1d2127;
   box-shadow: inset 0 3px 11px #0d1711;
   touch-action: none;
   cursor: grab;
@@ -49,7 +50,7 @@ const Stick = styled.div`
 
   &[data-active='true'] {
     cursor: grabbing;
-    border-color: #92b280;
+    border-color: #82afff;
   }
 
   &[data-disabled='true'] {
@@ -278,22 +279,22 @@ const ActionButton = styled.button`
   width: 49px;
   height: 49px;
   padding: 0;
-  border: 1px solid #df9477;
+  border: 1px solid #689ee9;
   border-radius: 50%;
-  background: #ad4a3d;
+  background: #0752aa;
   color: #fff6e2;
   box-shadow:
-    inset 0 2px #dc7b65,
+    inset 0 2px #69a4f5,
     0 3px #4c261f;
   font: 800 1.15rem var(--sans);
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
 
   &[data-first='true'] {
-    background: #ae3c5e;
-    border-color: #e38ea9;
+    background: #008348;
+    border-color: #54c18a;
     box-shadow:
-      inset 0 2px #d86c8d,
+      inset 0 2px #21ad70,
       0 3px #4b2635;
   }
 
@@ -311,7 +312,7 @@ const ActionButton = styled.button`
 
 const ActionLabel = styled.span`
   min-height: 2.35em;
-  color: #e8edda;
+  color: #eef1f3;
   text-align: center;
   overflow-wrap: anywhere;
   font: 650 0.7rem/1.18 var(--sans);
@@ -333,7 +334,7 @@ const Utility = styled.div`
 export function powerSlotLabel(power: Power | null, slot: number) {
   if (!power) return `Empty power-up slot ${slot + 1}`;
 
-  const effect = power === 'cool' ? `. Restore up to ${COOL_POINTS} Squished meter points` : '';
+  const effect = power === 'cool' ? `. Reduce Squished by up to ${COOL_POINTS} points` : '';
 
   return `Use ${POWERS[power].name} in slot ${slot + 1}${effect}`;
 }
@@ -400,13 +401,22 @@ export function TouchControls({
                 data-first={slot === 0}
                 aria-label={powerSlotLabel(power, slot)}
                 disabled={!power || disabled}
-                onClick={() => onPower(slot)}
+                onPointerDown={(event) => {
+                  if ((event.pointerType !== 'touch' && event.button !== 0) || !power || disabled)
+                    return;
+
+                  if (event.pointerType === 'touch') event.preventDefault();
+                  onPower(slot);
+                }}
+                onClick={(event) => {
+                  if (event.detail === 0) onPower(slot);
+                }}
               >
                 {slot === 0 ? 'A' : 'B'}
               </ActionButton>
               <ActionLabel>
                 {power ? POWERS[power].name : 'Empty'}
-                {power === 'cool' && ` · +${COOL_POINTS} meter points`}
+                {power === 'cool' && ` · −${COOL_POINTS} Squished`}
               </ActionLabel>
             </ActionSlot>
           );

@@ -53,19 +53,35 @@ export function buildHazards(car: T.Object3D) {
   }
 
   outline.closePath();
-  const puddle = part(spill, new T.ShapeGeometry(outline), 0x944b28);
+  const puddle = part(spill, new T.ShapeGeometry(outline), 0x8f4723);
 
   puddle.rotation.x = -Math.PI / 2;
   puddle.material.roughness = 0.13;
-  puddle.material.emissive.setHex(0x220d08);
+  puddle.material.emissive.setHex(0x391a07);
   const can = new T.Group();
 
-  can.position.set(0.42, 0.074, -0.31);
+  can.position.set(0.49, 0.081, -0.26);
+  can.scale.setScalar(1.24);
   can.rotation.z = 1.44;
   part(can, new T.CylinderGeometry(0.061, 0.061, 0.175, 10), 0xb84439);
   for (const side of [-1, 1])
     part(can, new T.CylinderGeometry(0.062, 0.062, 0.018, 10), 0xd6d3c5).position.y = side * 0.084;
   spill.add(can);
+
+  for (let i = 0; i < 23; i++) {
+    const angle = i * 2.39996;
+    const distance = (0.24 + (i % 9) * 0.061) * SODA_RADIUS;
+    const shine = part(
+      spill,
+      new T.CircleGeometry(0.009 + (i % 5) * 0.007, 8),
+      i % 3 ? 0xc77c41 : 0xe8af6d,
+    );
+
+    shine.position.set(Math.cos(angle) * distance, 0.0027, Math.sin(angle) * distance * 0.81);
+    shine.rotation.x = -Math.PI / 2;
+    shine.scale.x = 1.4;
+  }
+
   car.add(spill, speaker);
   speaker.visible = spill.visible = false;
 

@@ -18,6 +18,8 @@ import {
   SODA_DRAIN,
   SODA_RADIUS,
   SODA_SPEED,
+  SPREADER_X,
+  SPREADER_Z,
 } from './hazards.ts';
 import { Fluid } from './fluid.ts';
 import { guestContent } from './guestContent.ts';
@@ -33,6 +35,7 @@ import {
 } from './powers.ts';
 import type { Power } from './powers.ts';
 import { stationIndex, travelDirection } from './route.ts';
+import { trainSpeed, travelProgress, TRAVEL_SECONDS } from './trainMotion.ts';
 
 export const STEP = 1 / 20;
 
@@ -40,7 +43,6 @@ export const STANDARD_VOLUME = 245;
 
 export const HOT_VOLUME = 306;
 
-const TRAVEL = 6.5;
 const ARRIVAL = 0.48;
 const DWELL = 5.3;
 const CLOSING = 3.6;
@@ -94,7 +96,6 @@ export class Ride {
   expressUntil = 0;
   facing = 0;
   private steeringHeading = 0;
-  fanUntil = 0;
   fluidUntil = 0;
   sticky = false;
   jolt: { at: number; strength: number } | null = null;
@@ -111,12 +112,17 @@ export class Ride {
   private readonly pickPower: ReturnType<typeof powerDeck>;
   private readonly actions = new Set<0 | 1>();
   private waitingEncounter?: Encounter;
+  private waitingLocation?: Location;
+  private lastEncounterX?: number;
+  private lastPickupZones: number[] = [];
+  private readonly placements: () => number;
   private spawned = false;
   private accumulator = 0;
 
   constructor(readonly seed = 12071) {
+    this.placements = seededRandom(Math.imul(seed ^ 0x08c12b77, 0x9e3779b1));
     this.ambience = seededRandom(seed ^ 0x26618293);
-    this.random = seededRandom(seed ^ 0x6c8e9cf5);
+    this.random = seededRandom(Math.imul(seed ^ 0x6c8e9cf5, 0x9e3779b1));
     this.guestRandom = seededRandom(seed ^ 0x32c47ae1);
     this.verdictRandom = seededRandom(seed ^ 0xe96da48f);
     this.schedule = encounterSchedule(0, this.guestRandom);
@@ -230,8 +236,12 @@ export class Ride {
 
   get renderTravel() {
     return this.phase === 'running'
-      ? Math.max(0, Math.min(1, (this.phaseTime + this.accumulator) / TRAVEL))
+      ? travelProgress(this.phaseTime + this.accumulator)
       : this.travel;
+  }
+
+  get renderSpeed() {
+    return this.phase === 'running' ? trainSpeed(this.phaseTime + this.accumulator) : 0;
   }
 
   start() {
@@ -291,7 +301,6 @@ export class Ride {
     );
 
     const quiet = this.time < this.shieldUntil;
-    const fanned = this.time < this.fanUntil;
     const pressure = crowdPressure(this.stop, this.rawSqueeze, this.crowd.congestion(this.fluid));
     const load = quiet ? pressure * 0.2 : pressure;
 
@@ -303,7 +312,7 @@ export class Ride {
       this.tolerance,
       quiet ? Math.min(this.squeeze, load) : this.rawSqueeze === 1 ? pressure : this.squeeze,
       STEP,
-      !quiet && !fanned && this.encounter?.kind === 'smoker',
+      !quiet && this.encounter?.kind === 'smoker',
       this.guestPressure,
     );
 
@@ -376,8 +385,7 @@ export class Ride {
   private solveCrowd(dx: number, dz: number) {
     const { grid, fixtures } = this.car;
     const saved = this.crowd.snapshot();
-    const target =
-      this.encounter?.kind === 'ac' && this.time >= this.fanUntil ? HOT_VOLUME : STANDARD_VOLUME;
+    const target = this.encounter?.kind === 'ac' ? HOT_VOLUME : STANDARD_VOLUME;
 
     this.crowd.tryPush(this.fluid, dx, dz, grid, fixtures);
 
@@ -464,7 +472,6 @@ export class Ride {
       else {
         if (power === 'candy')
           this.candy = { ...candyLocation(this.fluid.x), until: this.time + CANDY_SECONDS };
-        if (power === 'fan') this.fanUntil = this.time + 14;
 
         this.crowd.react(power, this.fluid, this.time, this.phase === 'doors', this.facing);
       }
@@ -505,7 +512,9 @@ export class Ride {
     const { grid } = this.car;
     const seen = new Uint8Array(grid.size);
     const queue = [...this.fluid.cells];
-    const choices: number[] = [];
+    const zones = new Map<number, ReturnType<typeof grid.point>[]>();
+    const columns = new Set<number>();
+    const reach = this.stop === 0 ? 2.35 : 3.45;
 
     for (const id of queue) seen[id] = 1;
 
@@ -514,9 +523,19 @@ export class Ride {
       const point = grid.point(id);
       const distance = Math.hypot(point.x - this.fluid.x, point.z - this.fluid.z);
 
-      if (distance > 2.05) continue;
-      if (point.y > 0.28 && point.y < 0.58 && distance > 0.56 && Math.abs(point.z) < 0.95)
-        choices.push(id);
+      if (distance > reach) continue;
+
+      if (point.y > 0.32 && point.y < 0.55 && distance > 0.64 && Math.abs(point.z) < 1.0) {
+        const column = Math.floor(id / (grid.height * grid.width)) * grid.width + (id % grid.width);
+
+        if (!columns.has(column)) {
+          const zone = Math.floor((point.x + 4.8) / 1.6) * 2 + Number(point.z >= 0);
+
+          columns.add(column);
+          if (!zones.has(zone)) zones.set(zone, []);
+          zones.get(zone)!.push(point);
+        }
+      }
 
       for (const neighbor of grid.neighbors.subarray(id * 6, id * 6 + 6)) {
         if (neighbor < 0 || seen[neighbor] || this.mask[neighbor]) continue;
@@ -527,45 +546,94 @@ export class Ride {
     }
 
     const pickups: Pickup[] = [];
-    const used = new Set<number>();
+    const selectedZones: number[] = [];
 
     for (let index = 0; index < count; index++) {
       const first = pickups[0];
-      const pool = choices.filter((id) => {
-        if (!first) return true;
-        const candidate = grid.point(id);
+      const candidates = [...zones]
+        .map(([zone, spots]) => ({
+          zone,
+          spots: spots.filter(
+            (point) => !first || Math.hypot(point.x - first.x, point.z - first.z) >= 0.82,
+          ),
+        }))
+        .filter(({ spots }) => spots.length > 0);
+      const fresh = candidates.filter(
+        ({ zone }) => !this.lastPickupZones.includes(zone) && !selectedZones.includes(zone),
+      );
+      const choices = fresh.length ? fresh : candidates;
+      const choice = choices[Math.floor(this.random() * choices.length)];
 
-        return Math.hypot(candidate.x - first.x, candidate.z - first.z) >= 0.8;
-      });
-      const available = pool.length ? pool : choices.filter((id) => !used.has(id));
-      const id =
-        available[Math.floor(this.random() * available.length)] ??
-        this.fluid.cells.find(
-          (cell) => !used.has(cell) && Math.abs(grid.point(cell).y - 0.45) < 0.18,
-        ) ??
-        this.fluid.cells.find((cell) => !used.has(cell));
+      if (choice) {
+        const spot = choice.spots[Math.floor(this.random() * choice.spots.length)];
 
-      if (id === undefined) break;
+        selectedZones.push(choice.zone);
+        pickups.push({ ...spot, power: this.pickPower(first?.power) });
+        continue;
+      }
 
-      used.add(id);
-      pickups.push({ ...grid.point(id), power: this.pickPower(first?.power) });
+      const fallback = this.fluid.cells
+        .map((id) => grid.point(id))
+        .find(
+          (point) =>
+            Math.abs(point.y - 0.45) < 0.18 &&
+            (!first || Math.hypot(point.x - first.x, point.z - first.z) > 0.2),
+        );
+
+      if (!fallback) break;
+
+      pickups.push({ ...fallback, power: this.pickPower(first?.power) });
     }
+
+    this.lastPickupZones = [...selectedZones, ...this.lastPickupZones].slice(0, 3);
 
     return pickups;
   }
 
+  private encounterLocation(kind: Encounter): Location | undefined {
+    if (kind === 'ac') return;
+
+    if (kind === 'spreader') {
+      this.lastEncounterX = SPREADER_X;
+
+      return { x: SPREADER_X, z: SPREADER_Z };
+    }
+
+    const zones = kind === 'acrobat' ? [-1.66, 1.66] : [-3.32, -2.15, -0.69, 0.74, 2.13, 3.32];
+    const spaced = zones.filter(
+      (x) => this.lastEncounterX === undefined || Math.abs(x - this.lastEncounterX) > 1.12,
+    );
+    const choices = spaced.length ? spaced : zones;
+    const x =
+      choices[Math.floor(this.placements() * choices.length)] + (this.placements() - 0.5) * 0.3;
+    const z =
+      kind === 'speaker'
+        ? -0.99
+        : kind === 'soda'
+          ? 0.47
+          : kind === 'acrobat'
+            ? 0.14
+            : this.placements() < 0.43
+              ? -0.23
+              : 0.43;
+
+    this.lastEncounterX = x;
+
+    return { x, z };
+  }
+
   private moveTrain() {
     if (this.phase === 'running') {
-      this.travel = Math.min(1, this.phaseTime / TRAVEL);
+      this.travel = travelProgress(this.phaseTime);
 
-      if (this.phaseTime >= this.nextTrackJolt && this.phaseTime < TRAVEL - 0.7) {
+      if (this.phaseTime >= this.nextTrackJolt && this.phaseTime < TRAVEL_SECONDS - 1.5) {
         this.nextTrackJolt = Infinity;
         this.jolt = { at: this.time, strength: (this.ambience() < 0.5 ? -1 : 1) * 0.48 };
         this.cues.push('trackJolt');
       }
 
-      if (this.travel === 1) {
-        this.jolt = { at: this.time, strength: 0.9 };
+      if (this.phaseTime + 1e-9 >= TRAVEL_SECONDS) {
+        this.jolt = { at: this.time, strength: 0.69 };
         this.cues.push('brakeJolt');
         this.stop++;
         this.arrive();
@@ -584,7 +652,12 @@ export class Ride {
       }
 
       this.waitingEncounter = this.schedule.get(this.stop);
-      this.crowd.prepare(this.stop, this.waitingEncounter);
+
+      this.waitingLocation = this.waitingEncounter
+        ? this.encounterLocation(this.waitingEncounter)
+        : undefined;
+
+      this.crowd.prepare(this.stop, this.waitingEncounter, this.waitingLocation);
       this.setPhase('doors');
     } else if (this.phase === 'doors') {
       this.door = Math.min(1, this.phaseTime / 0.48);
@@ -601,12 +674,7 @@ export class Ride {
               ? this.guests.variant(kind)
               : 0,
           dialogueAt: this.time,
-          location:
-            kind === 'speaker'
-              ? { x: -3.75 + this.ambience() * 7.5, z: -0.99 }
-              : kind === 'soda'
-                ? { x: (this.ambience() < 0.5 ? -1 : 1) * (0.66 + 0.77 * this.ambience()), z: 0.18 }
-                : undefined,
+          location: this.waitingLocation,
         };
 
         this.waitingEncounter = undefined;

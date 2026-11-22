@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Scene } from 'three';
 import { buildBlob } from '../src/render/blobMesh.ts';
+import { trainSpeed, travelProgress, TRAVEL_SECONDS } from '../src/sim/trainMotion.ts';
 import { STATIONS, stationIndex, travelDirection } from '../src/sim/route.ts';
 import {
   ENCOUNTERS,
@@ -471,7 +472,7 @@ test('late crowd pressure is capped and Quiet Bubble helps even during a jam', (
   assertVolume(ride.fluid, ride.mask);
 });
 
-test('Speed Boost moves faster and Pocket Fan clears AC expansion while active', () => {
+test('Speed Boost increases steering speed', () => {
   const standard = new Ride();
   const boosted = new Ride();
 
@@ -482,18 +483,6 @@ test('Speed Boost moves faster and Pocket Fan clears AC expansion while active',
   standard.tick({ x: 1, z: 0 });
   boosted.tick({ x: 1, z: 0 });
   assert.ok(boosted.fluid.x > standard.fluid.x);
-
-  const cooled = new Ride();
-
-  cooled.schedule.clear();
-  cooled.schedule.set(0, 'ac');
-  cooled.start();
-  while (cooled.time < 3) cooled.tick({ x: 0, z: 0 });
-  assert.equal(cooled.fluid.volume, HOT_VOLUME);
-  cooled.inventory[0] = 'fan';
-  cooled.usePower(0);
-  cooled.tick({ x: 0, z: 0 });
-  assert.equal(cooled.fluid.volume, STANDARD_VOLUME);
 });
 
 test('power-up exits wait for open doors and departures update the rider count', () => {
@@ -758,7 +747,7 @@ test('a shover pushes the blob away and seated legs occupy the aisle', () => {
   ride.crowd.occupy(ride.car.grid, mask, 0);
 
   for (const side of [-1, 1]) {
-    const knee = ride.car.grid.at(SPREADER_X + side * 0.48, 0.49, SPREADER_Z + 0.55);
+    const knee = ride.car.grid.at(SPREADER_X + side * 0.48, 0.49, SPREADER_Z - 0.55);
 
     assert.equal(ride.car.fixtures[knee], 0);
     assert.equal(mask[knee], 1);
@@ -787,4 +776,47 @@ test('station braking jolts on arrival after 6.5 seconds in motion', () => {
   }
 
   assert.fail('Train never reached the second station');
+});
+
+test('the train eases into motion and slows before the braking jolt', () => {
+  assert.equal(travelProgress(0), 0);
+  assert.equal(travelProgress(TRAVEL_SECONDS), 1);
+  assert.equal(trainSpeed(0), 0);
+  assert.equal(trainSpeed(TRAVEL_SECONDS), 0);
+  assert.equal(trainSpeed(3), 1);
+
+  const coast = travelProgress(3.2) - travelProgress(3);
+  const approach = travelProgress(TRAVEL_SECONDS - 0.1) - travelProgress(TRAVEL_SECONDS - 0.3);
+
+  assert.ok(approach < coast * 0.15);
+
+  for (let t = STEP; t < TRAVEL_SECONDS; t += STEP)
+    assert.ok(travelProgress(t) > travelProgress(t - STEP));
+});
+
+test('seeded guest and pickup spawn locations cover multiple zones in the car', () => {
+  const guestZones = new Set();
+  const pickupZones = new Set();
+
+  for (let seed = 0; seed < 48; seed++) {
+    const ride = new Ride(seed);
+
+    ride.schedule.clear();
+    ride.schedule.set(0, 'shover');
+    ride.inventory[0] = 'cool';
+    ride.inventory[1] = 'crazy';
+    ride.start();
+
+    for (let t = 0; t < 45; t++) ride.tick({ x: 0, z: 0 });
+
+    assert.ok(ride.encounter?.location);
+    assert.ok(ride.pickups[0]);
+    guestZones.add(Math.round(ride.encounter.location.x));
+    const { x, z } = ride.pickups[0];
+
+    pickupZones.add(Math.floor((x + 4.8) / 1.6) + '/' + Math.sign(z));
+  }
+
+  assert.ok(guestZones.size >= 5);
+  assert.ok(pickupZones.size >= 7);
 });

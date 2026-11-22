@@ -1,9 +1,10 @@
 :root {
-  --sans: 'Inter', 'Aptos', system-ui, sans-serif;
-  --mono: 'IBM Plex Mono', 'Cascadia Mono', ui-monospace, monospace;
+  --sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --mono: var(--sans);
+  font-variant-numeric: tabular-nums;
   font-family: var(--sans);
-  color: #f1efdb;
-  background: #14201d;
+  color: #f5f6f7;
+  background: #0c0e11;
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -20,7 +21,7 @@ body {
 }
 
 button:focus-visible {
-  outline: 2px solid #f6efdb;
+  outline: 2px solid #fff;
   outline-offset: 3px;
 }
 

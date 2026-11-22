@@ -22,4 +22,6 @@ Each encounter plays a one-shot vocal reaction from a nearby rider two seconds a
 | Weird rider      | [ugh (male) by brookmorgan](https://freesound.org/people/brookmorgan/sounds/189565/)                     | 0.22–0.91 s    |
 | Broken AC        | [Man sighs in frustration.m4a by sandralaughs](https://freesound.org/people/sandralaughs/sounds/519201/) | 0.58–2.49 s    |
 
-The disruptive loudspeaker reuses the recorded door announcement with a narrow band-pass, distortion, and two short echoes. Train jolts, sticky soda, the shove, rhino bumps, Super Fluid, and the expanded pop are synthesized in the game. Background rider reactions reuse the credited recordings at lower volume.
+The disruptive loudspeaker uses [Last stop.wav by jerk01](https://freesound.org/people/jerk01/sounds/86938/), a CC0 recording of an MTA R160 announcement. The game uses the 5.12–8.82 s excerpt with a narrow band-pass, distortion, and short echoes. Train jolts, sticky soda, the shove, rhino bumps, Super Fluid, and the expanded pop are synthesized in the game. Background rider reactions reuse the credited recordings at lower volume.
+
+The two Brooklyn-accent reactions use [WAS THAT ME OR ONE OF YOU GUYS.wav by metrostock99](https://freesound.org/people/metrostock99/sounds/514704/) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The game uses the 2.34–4.53 s and 6.25–8.61 s excerpts, trimmed, filtered, and faded to mono.
