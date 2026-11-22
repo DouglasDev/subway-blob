@@ -408,8 +408,10 @@ export function App() {
           ? PRANKS[hud.variant].name
           : undefined;
   const activePower = hud.power ?? hud.sustainedPower;
+  const ready = hud.phase === 'ready';
   const ended = hud.phase === 'popped';
   const result = showResult;
+  const controlsDisabled = graphicsError || ready || ended;
 
   function usePower(slot: 0 | 1) {
     audio.unlock();
@@ -421,10 +423,11 @@ export function App() {
     else touches.current.delete(pointer);
   }
 
-  const startButton = !graphicsError && (hud.phase === 'ready' || result) && (
+  const startButton = !graphicsError && (ready || result) && (
     <Button
       type="button"
       data-touch={touchLayout}
+      data-start={ready}
       onClick={() => {
         audio.unlock();
         if (result) restart();
@@ -438,6 +441,7 @@ export function App() {
     <SoundButton
       type="button"
       data-touch={touchLayout}
+      data-idle={ready}
       onClick={toggleSound}
       aria-label={sound ? 'Unmute sound' : 'Mute sound'}
       aria-pressed={sound}
@@ -510,14 +514,14 @@ export function App() {
           )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}
 
-          {arcadeMode && !ended && hud.phase !== 'ready' && (
+          {arcadeMode && !controlsDisabled && (
             <MovementPad cabinet onDirection={setTouchDirection} />
           )}
 
-          {(graphicsError || hud.phase === 'ready' || result) && (
-            <Overlay data-touch={touchLayout}>
-              <Card data-touch={touchLayout}>
-                <Prompt>
+          {(graphicsError || ready || result) && (
+            <Overlay data-touch={touchLayout} data-start={ready && !graphicsError}>
+              <Card data-touch={touchLayout} data-start={ready && !graphicsError}>
+                <Prompt data-start={ready && !graphicsError}>
                   <PromptTitle>
                     {graphicsError
                       ? '3D view unavailable'
@@ -533,7 +537,7 @@ export function App() {
                         ? 'Miserable blob from track grime. Dodge the crowd before you get squished.'
                         : 'You’re a miserable blob formed from subway-track grime. Slip through the crowd and grab power-ups to avoid getting squished.'}
                 </Prompt>
-                {!touchLayout && startButton}
+                {startButton}
               </Card>
             </Overlay>
           )}
@@ -561,7 +565,7 @@ export function App() {
             />
           </Gauge>
           {!touchLayout && (
-            <Controls>
+            <Controls data-idle={controlsDisabled}>
               <Keys>W A S D</Keys>
               <Keys>↑ ← ↓ →</Keys> Move
             </Controls>
@@ -571,16 +575,14 @@ export function App() {
         {touchLayout ? (
           <TouchControls
             inventory={hud.inventory}
-            disabled={graphicsError || ended || hud.phase === 'ready'}
+            disabled={controlsDisabled}
             onStick={(input) => {
               stick.current = input;
             }}
             onPower={usePower}
-          >
-            {startButton || null}
-          </TouchControls>
+          />
         ) : (
-          <Inventory aria-label="Power-up slots">
+          <Inventory aria-label="Power-up slots" data-idle={controlsDisabled}>
             {hud.inventory.map((power, slot) => {
               const key = (arcadeMode ? ['A', 'B'] : ['Z', 'X'])[slot];
 
@@ -588,7 +590,7 @@ export function App() {
                 <InventorySlot
                   key={slot}
                   type="button"
-                  disabled={!power || ended}
+                  disabled={!power || controlsDisabled}
                   aria-label={powerSlotLabel(power, slot)}
                   onClick={() => usePower(slot === 0 ? 0 : 1)}
                 >

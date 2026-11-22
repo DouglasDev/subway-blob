@@ -1,6 +1,6 @@
 import { styled } from '@linaria/react';
 import { useRef, useState } from 'react';
-import type { PointerEvent, ReactNode } from 'react';
+import type { PointerEvent } from 'react';
 import type { Input } from './sim/ride.ts';
 import { COOL_POINTS, POWERS } from './sim/powers.ts';
 import type { Power } from './sim/powers.ts';
@@ -24,9 +24,12 @@ const Deck = styled.div`
   border-top: 1px solid #475b4f;
   user-select: none;
 
+  &[data-idle='true'] {
+    opacity: 0.38;
+  }
+
   @media (orientation: landscape) and (max-height: 500px) {
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas: 'pad utility powers';
+    grid-template-areas: 'pad powers';
     padding-block: 3px;
   }
 `;
@@ -318,19 +321,6 @@ const ActionLabel = styled.span`
   font: 650 0.7rem/1.18 var(--sans);
 `;
 
-const Utility = styled.div`
-  display: flex;
-  grid-column: 1 / -1;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-
-  @media (orientation: landscape) and (max-height: 500px) {
-    grid-area: utility;
-    flex-wrap: wrap;
-  }
-`;
-
 export function powerSlotLabel(power: Power | null, slot: number) {
   if (!power) return `Empty power-up slot ${slot + 1}`;
 
@@ -377,18 +367,11 @@ type TouchControlsProps = {
   disabled: boolean;
   onPower: (slot: 0 | 1) => void;
   onStick: (input: Input) => void;
-  children: ReactNode;
 };
 
-export function TouchControls({
-  inventory,
-  disabled,
-  onPower,
-  onStick,
-  children,
-}: TouchControlsProps) {
+export function TouchControls({ inventory, disabled, onPower, onStick }: TouchControlsProps) {
   return (
-    <Deck role="group" aria-label="Touch controls">
+    <Deck role="group" aria-label="Touch controls" data-idle={disabled}>
       <AnalogPad disabled={disabled} onStick={onStick} />
       <ActionButtons role="group" aria-label="Power-up slots">
         {([0, 1] as const).map((slot) => {
@@ -422,7 +405,6 @@ export function TouchControls({
           );
         })}
       </ActionButtons>
-      {children && <Utility>{children}</Utility>}
     </Deck>
   );
 }

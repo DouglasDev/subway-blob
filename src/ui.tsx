@@ -395,6 +395,11 @@ export const Overlay = styled.div`
   padding: 18px;
   background: linear-gradient(0deg, #101a16c7 0%, transparent 50%);
 
+  &[data-start='true'] {
+    align-items: center;
+    background: #0c171580;
+  }
+
   @media (max-width: 360px) and (max-height: 650px) {
     &[data-touch='true'] {
       padding: 8px;
@@ -426,6 +431,14 @@ export const Card = styled.div`
   gap: 14px;
   box-shadow: 0 10px 28px #10161379;
 
+  &[data-start='true'] {
+    width: min(100%, 360px);
+    display: grid;
+    justify-content: stretch;
+    border-color: #7bb994;
+    box-shadow: 0 12px 32px #091913bd;
+  }
+
   @media (max-width: 440px) {
     padding: 12px;
     gap: 9px;
@@ -434,10 +447,23 @@ export const Card = styled.div`
   @media (orientation: landscape) and (max-height: 500px) {
     &[data-touch='true'] {
       padding: 7px 11px;
+
+      &[data-start='true'] {
+        width: min(100%, 590px);
+        grid-template-columns: minmax(0, 1fr) minmax(120px, 40%);
+        padding-block: 4px;
+        gap: 12px;
+      }
     }
   }
 
   html[data-arcade='true'] & {
+    &[data-start='true'] {
+      width: min(100%, 254px);
+      padding: 8px 10px;
+      gap: 7px;
+    }
+
     width: 100%;
     padding: 5px 6px;
     gap: 5px;
@@ -452,9 +478,20 @@ export const Prompt = styled.div`
   font-size: 0.81rem;
   line-height: 1.4;
 
+  &[data-start='true'] {
+    color: #e7edf0;
+    font-size: 0.94rem;
+    line-height: 1.3;
+    text-align: center;
+  }
+
   html[data-arcade='true'] & {
     font-size: 9px;
     gap: 2px;
+
+    &[data-start='true'] {
+      font-size: 11px;
+    }
   }
 `;
 
@@ -490,7 +527,29 @@ export const Button = styled.button`
     border-radius: 22px;
   }
 
+  &[data-start='true'] {
+    min-height: 52px;
+    background: #91efb2;
+    color: #102719;
+    border-color: #bdfacd;
+    font-size: 1.05rem;
+
+    &:hover {
+      background: #bdffd0;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: 3px;
+    }
+  }
+
   html[data-arcade='true'] & {
+    &[data-start='true'] {
+      min-height: 32px;
+      font-size: 14px;
+    }
+
     min-height: 25px;
     padding: 4px 7px;
     font-size: 10px;
@@ -670,6 +729,10 @@ export const Controls = styled.div`
   color: #d4ddcb;
   font-size: 0.75rem;
 
+  &[data-idle='true'] {
+    opacity: 0.35;
+  }
+
   @media (max-width: 730px) {
     grid-column: 1 / -1;
     padding-block: 4px;
@@ -699,6 +762,10 @@ export const SoundButton = styled.button`
   font: 0.69rem var(--mono);
   cursor: pointer;
 
+  &[data-idle='true']:not(:hover, :focus-visible) {
+    opacity: 0.72;
+  }
+
   @media (max-width: 480px) {
     min-height: 38px;
     padding: 4px 6px;
@@ -725,6 +792,10 @@ export const Inventory = styled.div`
   padding: 6px 12px;
   background: #15171b;
   border-top: 1px solid #3c5246;
+
+  &[data-idle='true'] {
+    opacity: 0.38;
+  }
 
   html[data-arcade='true'] & {
     flex: none;
