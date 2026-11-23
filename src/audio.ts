@@ -158,6 +158,7 @@ export class RideAudio {
   private allowed = false;
   private muted = false;
   private rolling = false;
+  private moanUntil = 0;
   private activePerformance?: HTMLAudioElement;
   private activeReaction?: HTMLAudioElement;
 
@@ -199,7 +200,7 @@ export class RideAudio {
       if (running) {
         const duck = this.playingSamples.has('annoy') ? 0.27 : this.activePerformance ? 0.55 : 1;
 
-        this.roll.volume = (0.08 + speed * 0.35) * duck;
+        this.roll.volume = (0.08 + speed * 0.35) * duck * (this.moaning ? 0.52 : 1);
         this.roll.playbackRate = 0.75 + 0.27 * speed;
       }
 
@@ -227,7 +228,7 @@ export class RideAudio {
         this.playingSamples.has('speaker') ||
         (this.activeReaction && !this.activeReaction.paused && !this.activeReaction.ended);
 
-      active.volume = reacting ? volume * 0.42 : volume;
+      active.volume = volume * (reacting ? 0.42 : 1) * (this.moaning ? 0.64 : 1);
     }
 
     if (active === this.activePerformance) return;
@@ -313,18 +314,26 @@ export class RideAudio {
   }
 
   damageMoan(squished: number) {
-    const context = this.context;
+    if (!this.allowed || this.muted) return;
 
-    if (!this.allowed || this.muted || context?.state !== 'running') return;
+    if (this.context?.state === 'running') this.playDamageMoan(squished);
+    else this.whenAudioResumes(() => this.playDamageMoan(squished));
+  }
 
+  private get moaning() {
+    return !this.muted && !!this.context && this.context.currentTime < this.moanUntil;
+  }
+
+  private playDamageMoan(squished: number) {
     const pitch = 168 - 72 * Math.max(0, Math.min(1, squished));
 
-    this.playTones([{ at: 0, length: 0.73, pitch, end: pitch * 0.68 }], 0.05, 0.13);
+    this.moanUntil = this.context!.currentTime + 0.76;
+    this.playTones([{ at: 0, length: 0.73, pitch, end: pitch * 0.68 }], 0.16, 0.105);
 
     this.playTones(
-      [{ at: 0.035, length: 0.56, pitch: pitch * 2, end: pitch * 1.36, shape: 'sine' }],
-      0.017,
-      0.11,
+      [{ at: 0.025, length: 0.6, pitch: pitch * 2, end: pitch * 1.36, shape: 'sine' }],
+      0.075,
+      0.1,
     );
   }
 
@@ -532,6 +541,7 @@ export class RideAudio {
 
   reset() {
     this.playbackGeneration++;
+    this.moanUntil = 0;
     this.rolling = false;
     this.activePerformance = undefined;
     this.activeReaction = undefined;

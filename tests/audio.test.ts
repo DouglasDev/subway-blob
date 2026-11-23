@@ -33,11 +33,12 @@ class Media extends EventTarget {
 const buffer = new ArrayBuffer(1);
 
 class Node {
+  peaks: number[] = [];
   gain = {
     value: 0,
     setTargetAtTime() {},
     setValueAtTime() {},
-    linearRampToValueAtTime() {},
+    linearRampToValueAtTime: (value: number) => this.peaks.push(value),
     exponentialRampToValueAtTime() {},
   };
   pitches: number[] = [];
@@ -67,6 +68,7 @@ class Context {
   static players: Node[] = [];
   static latest: Context;
   readonly oscillators: Node[] = [];
+  readonly gains: Node[] = [];
   currentTime = 0;
   static resume?: () => void;
   destination = new Node();
@@ -94,7 +96,11 @@ class Context {
   }
 
   createGain() {
-    return new Node();
+    const gain = new Node();
+
+    this.gains.push(gain);
+
+    return gain;
   }
 
   createDynamicsCompressor() {
@@ -211,17 +217,35 @@ test('blob moans descend with damage and recovery blips rise', async (t) => {
   audio.unlock();
   const context = Context.latest;
 
-  audio.damageMoan(0);
+  audio.travel(true, 1);
+  const train = Media.played.at(-1)! as Media & { volume: number };
+
+  audio.travel(true, 1);
+  const trainVolume = train.volume;
+
+  audio.damageMoan(0.25);
   assert.equal(context.oscillators.length, 0);
   Context.resume!();
   await new Promise(setImmediate);
 
-  audio.damageMoan(0.25);
+  assert.equal(context.oscillators.length, 2);
+
+  assert.deepEqual(
+    context.gains.flatMap((node) => node.peaks),
+    [0.16, 0.075],
+  );
+
+  audio.travel(true, 1);
+  assert.ok(train.volume < trainVolume * 0.6);
+
   audio.damageMoan(0.75);
   assert.equal(context.oscillators.length, 4);
   const [[high, highEnd], , [low, lowEnd]] = context.oscillators.map((node) => node.pitches);
 
   assert.ok(low < high && highEnd < high && lowEnd < low);
+  context.currentTime = 0.8;
+  audio.travel(true, 1);
+  assert.equal(train.volume, trainVolume);
 
   audio.setMute(true);
   audio.recoveryBlips();
