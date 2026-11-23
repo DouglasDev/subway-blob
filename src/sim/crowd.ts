@@ -18,10 +18,13 @@ export type Location = { x: number; z: number };
 
 type Slot = Location & { key: number; zone: number; priority: number };
 
+// Local X side of the hand that holds the phone.
+type PhoneHand = -1 | 1;
+
 export type Rider = Location & {
   id: number;
   skinTone: number;
-  phone: boolean;
+  phone: PhoneHand | null;
   slot: Slot;
   heading: number;
   stride: number;
@@ -61,12 +64,23 @@ const LIGHT_STOP_POWER_EXITS = 4;
 
 export const SKIN_TONES = [0xdfa982, 0x8e5040, 0xb87752, 0x58362b, 0xe8ba98, 0xa66b52];
 
-function skinDeck(seed: number) {
+function skinDeck(seed: number, guest = false) {
   const random = seededRandom(seed);
   let bag: number[] = [];
 
   return () => {
-    if (bag.length === 0) bag = shuffle([...SKIN_TONES], random);
+    if (bag.length === 0) {
+      const tones = guest
+        ? SKIN_TONES.flatMap((tone, index) => Array<number>(index % 2 === 0 ? 4 : 2).fill(tone))
+        : [...SKIN_TONES];
+
+      if (guest) {
+        tones.push(SKIN_TONES[2 * Math.floor(random() * 3)]);
+        tones.push(SKIN_TONES[2 * Math.floor(random() * 3) + 1]);
+      }
+
+      bag = shuffle(tones, random);
+    }
 
     return bag.pop()!;
   };
@@ -85,6 +99,7 @@ export class Crowd {
   private readonly guestSkin: () => number;
   private readonly phoneRandom: () => number;
   private nextPhone?: boolean;
+  private nextPhoneHand: PhoneHand;
   private readonly passageRandom: () => number;
   private readonly boardingRandom: () => number;
   private nextLightStop: number;
@@ -93,8 +108,9 @@ export class Crowd {
   constructor(seed: number) {
     this.random = seededRandom(seed);
     this.phoneRandom = seededRandom(Math.imul(seed ^ 0x12a4f087, 0x85ebca6b));
+    this.nextPhoneHand = seededRandom(seed ^ 0x1ac974f3)() < 0.5 ? -1 : 1;
     this.passengerSkin = skinDeck(Math.imul(seed ^ 0xc6217ee9, 0x9e3779b1));
-    this.guestSkin = skinDeck(Math.imul(seed ^ 0xa0e128b3, 0x85ebca6b));
+    this.guestSkin = skinDeck(Math.imul(seed ^ 0xa0e128b3, 0x85ebca6b), true);
     this.passageRandom = seededRandom(Math.imul(seed ^ 0x447c07af, 0x9e3779b1));
     this.boardingRandom = seededRandom(Math.imul(seed ^ 0xad9f381d, 0x9e3779b1));
     this.nextLightStop = 4 + Math.floor(this.boardingRandom() * 3);
@@ -505,9 +521,11 @@ export class Crowd {
 
   private createRider(slot: Slot, position: Location, heading: number, role?: Encounter): Rider {
     const skinTone = role ? this.guestSkin() : this.passengerSkin();
-    const phone = !role && (this.nextPhone ?? this.phoneRandom() < 0.5);
+    const readsPhone = !role && (this.nextPhone ?? this.phoneRandom() < 0.5);
+    const phone = readsPhone ? this.nextPhoneHand : null;
 
-    if (!role) this.nextPhone = this.nextPhone === undefined ? !phone : undefined;
+    if (!role) this.nextPhone = this.nextPhone === undefined ? !readsPhone : undefined;
+    if (readsPhone) this.nextPhoneHand = this.nextPhoneHand === 1 ? -1 : 1;
     const rider: Rider = {
       id: this.serial++,
       skinTone,
@@ -709,46 +727,29 @@ export class Crowd {
   private clearPassages(staying: Rider[]) {
     const previous = this.passages;
     const choices = shuffle([...PASSAGES], this.passageRandom);
-    const wanted = this.passageRandom() < 0.5 ? 2 : 3;
-    let selected: CrowdPassage[] = [];
+    const wanted = this.passageRandom() < 0.5 ? 1 : 2;
 
-    const capacity = (passages: readonly CrowdPassage[]) =>
-      this.slots.filter((slot) => !passages.some((passage) => inPassage(slot, passage))).length;
+    const sameLayout = (passages: CrowdPassage[]) =>
+      passages.length === previous.length && passages.every((item) => previous.includes(item));
 
-    const overlaps = (a: CrowdPassage, b: CrowdPassage) =>
-      a.from < b.to + 0.18 && a.to > b.from - 0.18;
+    const fits = (passages: CrowdPassage[]) =>
+      this.slots.filter((slot) => !passages.some((passage) => inPassage(slot, passage))).length >
+      staying.length;
 
-    for (const passage of choices) {
-      if (selected.length === wanted) break;
-      if (selected.some((other) => overlaps(passage, other))) continue;
-
-      const reserved = [...selected, passage];
-
-      if (capacity(reserved) < staying.length + 1) continue;
-      if (selected.length === wanted - 1 && reserved.every((item) => previous.includes(item)))
-        continue;
-
-      selected.push(passage);
-    }
-
-    if (
-      selected.length < 2 ||
-      (selected.length === previous.length && selected.every((item) => previous.includes(item)))
-    ) {
-      const alternatives = choices.flatMap((first, index) =>
-        choices
-          .slice(index + 1)
-          .filter(
-            (second) =>
-              !overlaps(first, second) &&
-              !(previous.length === 2 && previous.includes(first) && previous.includes(second)),
+    const singles = choices.map((passage) => [passage]);
+    const pairs =
+      wanted === 2
+        ? choices.flatMap((first, index) =>
+            choices
+              .slice(index + 1)
+              .filter((second) => first.to + 0.18 <= second.from || second.to + 0.18 <= first.from)
+              .map((second) => [first, second]),
           )
-          .map((second) => [first, second]),
-      );
-      const alternative = alternatives.find((pair) => capacity(pair) >= staying.length + 1);
-
-      if (alternative) selected = alternative;
-    }
+        : [];
+    const selected =
+      [...pairs, ...singles].find((layout) => !sameLayout(layout) && fits(layout)) ??
+      singles.find(fits) ??
+      [];
 
     this.passages = selected;
 

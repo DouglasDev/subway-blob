@@ -42,19 +42,7 @@ export function interiorMaterials() {
   });
 
   return {
-    floor: new T.MeshPhysicalMaterial({
-      map: flooring,
-      roughness: 0.72,
-      clearcoat: 0.17,
-      clearcoatRoughness: 0.57,
-    }),
-    wall: new T.MeshPhysicalMaterial({
-      map: grain,
-      roughness: 0.45,
-      metalness: 0.44,
-      anisotropy: 0.29,
-      clearcoat: 0.06,
-      clearcoatRoughness: 0.45,
-    }),
+    floor: new T.MeshStandardMaterial({ map: flooring, roughness: 0.81 }),
+    wall: new T.MeshStandardMaterial({ map: grain, roughness: 0.47, metalness: 0.44 }),
   };
 }

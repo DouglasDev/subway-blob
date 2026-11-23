@@ -359,13 +359,14 @@ test('some pickup waves place the extra tokens beyond a blocked section', () => 
   assert.ok(found);
 });
 
-test('the initial ordinary passengers include six phone readers per dozen', () => {
+test('the initial dozen includes three phone readers on each hand', () => {
   const make = (seed: number) => new Crowd(seed).riders.map(({ phone }) => phone);
 
   for (const seed of [14, 42, 12071]) {
     const phones = make(seed);
 
-    assert.equal(phones.filter(Boolean).length, 6);
+    assert.equal(phones.filter((hand) => hand === -1).length, 3);
+    assert.equal(phones.filter((hand) => hand === 1).length, 3);
     assert.deepEqual(phones, make(seed));
   }
 });
@@ -375,6 +376,7 @@ test('seeded late passages change each stop and fit the ordinary blob', () => {
   const idle = { x: 0, z: 0 };
   const crowd = new Crowd(42);
   let previous = '';
+  const counts = new Set<number>();
 
   for (let stop = 0; stop < 20; stop++) {
     crowd.prepare(stop);
@@ -386,7 +388,7 @@ test('seeded late passages change each stop and fit the ordinary blob', () => {
 
     crowd.finishDoors();
     if (stop < 12) continue;
-    assert.ok(crowd.passages.length === 2 || crowd.passages.length === 3);
+    counts.add(crowd.passages.length);
 
     const signature = JSON.stringify(
       [...crowd.passages].sort((a, b) => a.from - b.from || a.z - b.z),
@@ -410,6 +412,8 @@ test('seeded late passages change each stop and fit the ordinary blob', () => {
       assertVolume(fluid, mask);
     }
   }
+
+  assert.deepEqual(counts, new Set([1, 2]));
 });
 
 test('late pickup waves add one pack per four stops and Recovery restores fifty points', () => {
@@ -1173,13 +1177,13 @@ test('passive recovery waits for continuous safe time and resets in soda', () =>
   assert.ok(ride.tolerance > hurt);
 });
 
-test('guest and passenger tones cycle independently and replay deterministically', () => {
+test('weighted guest tones and even passenger tones replay independently', () => {
   const draw = (seed: number, stopOffset: number) => {
     const crowd = new Crowd(seed);
     const guests: number[] = [];
     const passengers = crowd.riders.map((rider) => rider.skinTone);
 
-    for (let stop = 0; stop < 18; stop++) {
+    for (let stop = 0; stop < 40; stop++) {
       crowd.riders = [];
       crowd.prepare(stop + stopOffset, 'shover');
 
@@ -1195,11 +1199,17 @@ test('guest and passenger tones cycle independently and replay deterministically
   assert.deepEqual(first, draw(12071, 0));
   assert.deepEqual(first.guests, draw(12071, 9).guests);
 
-  for (const tones of [first.guests, first.passengers]) {
-    for (let offset = 0; offset + 6 <= tones.length; offset += 6) {
-      assert.deepEqual(new Set(tones.slice(offset, offset + 6)), new Set(SKIN_TONES));
-    }
+  const lighter = SKIN_TONES.filter((_, index) => index % 2 === 0);
+
+  for (let offset = 0; offset < first.guests.length; offset += 20) {
+    const bag = first.guests.slice(offset, offset + 20);
+
+    assert.deepEqual(new Set(bag), new Set(SKIN_TONES));
+    assert.equal(bag.filter((tone) => lighter.includes(tone)).length, 13);
   }
+
+  for (let offset = 0; offset + 6 <= first.passengers.length; offset += 6)
+    assert.deepEqual(new Set(first.passengers.slice(offset, offset + 6)), new Set(SKIN_TONES));
 
   assert.ok(new Set(Array.from({ length: 18 }, (_, seed) => draw(seed, 0).guests[0])).size > 1);
 });
@@ -1257,6 +1267,39 @@ test('a shover pushes the blob away and seated legs occupy the aisle', () => {
 
     assert.equal(ride.car.fixtures[knee], 0);
     assert.equal(mask[knee], 1);
+  }
+});
+
+test('a shove costs ten points once, and Quiet Bubble absorbs the hit', () => {
+  for (const shielded of [false, true]) {
+    const ride = new Ride();
+    const rider = ride.crowd.riders[0];
+
+    ride.crowd.riders = [rider];
+    ride.start();
+    ride.encounter = { kind: 'shover', expires: 1, began: 0, variant: 0, dialogueAt: 0 };
+    Object.assign(rider, { x: 0.91, z: 0, role: 'shover', slot: { ...rider.slot, x: 0.91, z: 0 } });
+    if (shielded) ride.shieldUntil = 1;
+    ride.tick({ x: 0, z: 0 });
+
+    assert.ok(ride.cues.includes('shove'));
+    const afterAmbientDamage = squeezeTolerance(
+      shielded ? 1 : 0.9,
+      0,
+      STEP,
+      false,
+      ride.guestPressure * ride.guestDamageMultiplier,
+      ride.damageMultiplier,
+      false,
+    );
+
+    assert.equal(ride.tolerance, afterAmbientDamage);
+
+    ride.cues.length = 0;
+    ride.tick({ x: 1, z: 0 });
+
+    assert.ok(!ride.cues.includes('shove'));
+    assert.ok(ride.tolerance > 0.89);
   }
 });
 

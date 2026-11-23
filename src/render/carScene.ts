@@ -23,10 +23,7 @@ const steel = paint(0x8d9e9b, 0.62, 0.34);
 const darkSteel = paint(0x374849, 0.4);
 const panels = paint(0xd0d8cb);
 
-const plastic = (color: number) =>
-  new T.MeshPhysicalMaterial({ color, roughness: 0.49, clearcoat: 0.21, clearcoatRoughness: 0.37 });
-
-const seat = plastic(0x478d88);
+const seat = paint(0x478d88, 0.08, 0.38);
 const windowGlass = new T.MeshStandardMaterial({
   color: 0x72998e,
   transparent: true,
@@ -34,7 +31,7 @@ const windowGlass = new T.MeshStandardMaterial({
   roughness: 0.22,
   depthWrite: false,
 });
-const crossSeat = plastic(0x9b613c);
+const crossSeat = paint(0x9b613c, 0.08, 0.42);
 const yellow = paint(0xe4b144);
 const ink = paint(0x183032);
 const lamp = new T.MeshBasicMaterial({ color: 0xf8e7bd });

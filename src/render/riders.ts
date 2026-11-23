@@ -38,6 +38,8 @@ export function buildRiders(scene: T.Object3D) {
   const hair = part(scene, new T.IcosahedronGeometry(1, 1), undefined, 128 * 3);
   const box = new T.BoxGeometry(1, 1, 1);
   const arms = part(scene, box, undefined, 128 * 2);
+
+  arms.name = 'Passenger arms';
   const legs = part(scene, box, undefined, 128 * 4);
   const seatedLegs = part(scene, new T.CylinderGeometry(0.47, 0.54, 1, 9), undefined, 128 * 4);
   const shoes = part(scene, box, undefined, 128 * 4);
@@ -136,7 +138,7 @@ export function buildRiders(scene: T.Object3D) {
 
     for (const [index, rider] of riders.entries()) {
       const { id, x, z, stride, role } = rider;
-      const looking = !!rider.phone && !stride && !role && !rider.trajectory;
+      const phoneHand = !stride && !role && !rider.trajectory ? rider.phone : null;
       const seated = role === 'spreader' && !rider.trajectory && !stride && spreaderSitting(x, z);
       const size = seated ? 1 : riderSize(id);
       const style = riderStyle(id);
@@ -230,12 +232,25 @@ export function buildRiders(scene: T.Object3D) {
       stamp(torso[kind], counts[kind]++, 0xffffff, 0, 1.08, 0, 0.36, 0.56, 0.23, 0, upper);
       let face = upper;
 
-      if (looking) {
+      if (phoneHand) {
         hinge(0, 1.38, 0, 0.36, upper);
         face = headMatrix.copy(jointMatrix).multiply(neckOffset);
-        hinge(0.09, 1.13, 0.405, 0.37, upper);
-        stamp(phones, phoneCount, 0x1b2029, 0, 0, 0, 0.102, 0.17, 0.033, 0, jointMatrix);
-        stamp(screens, phoneCount++, 0x8caeba, 0, 0, -0.018, 0.08, 0.144, 0.006, 0, jointMatrix);
+        hinge(phoneHand * 0.18, 1.075, 0.35, 0.37, upper);
+        stamp(phones, phoneCount, 0x1b2029, 0, 0, 0, 0.1326, 0.221, 0.0429, 0, jointMatrix);
+
+        stamp(
+          screens,
+          phoneCount++,
+          0x8caeba,
+          0,
+          0,
+          -0.0234,
+          0.104,
+          0.1872,
+          0.0078,
+          0,
+          jointMatrix,
+        );
       }
 
       stamp(head, index, skin, 0, 1.52, 0.014, 0.127, 0.167, 0.126, 0, face);
@@ -307,7 +322,7 @@ export function buildRiders(scene: T.Object3D) {
           0.006,
           -angle * 0.8 -
             pushing * 1.4 -
-            (role === 'musician' ? 1.04 : looking ? (sign > 0 ? 1.06 : 0.77) : 0),
+            (role === 'musician' ? 1.04 : phoneHand === sign ? 0.84 : 0),
           upper,
         );
 

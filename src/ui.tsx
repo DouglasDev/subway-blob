@@ -848,27 +848,74 @@ export const InventoryKey = styled.kbd`
 
 export const EncounterNotice = styled.div`
   position: absolute;
-  left: 16px;
-  top: 15px;
-  background: #493528ee;
-  color: #fae7b6;
-  border: 1px solid #926d4e;
+  left: 50%;
+  bottom: 18px;
+  width: max-content;
+  max-width: calc(100% - 42px);
+  z-index: 2;
+  transform: translateX(-50%) rotate(-3deg);
+  background: #793526;
+  color: #fff2d3;
+  border: 2px solid #ffd190;
   border-radius: 4px;
-  padding: 6px 9px;
-  font: 0.69rem var(--mono);
+  box-shadow: 3px 4px 0 #301a14;
+  padding: 7px 13px;
+  font: 800 0.95rem / 1.2 var(--sans);
+  text-align: center;
   pointer-events: none;
+  animation: encounterToast 4.2s both;
 
-  &[data-danger='true'] {
-    background: #743728f2;
-    border-color: #e57d5f;
-    color: #fff1c8;
+  &[data-above-power='true'] {
+    bottom: 52px;
+  }
+
+  @keyframes encounterToast {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, 14px) rotate(-17deg) scale(0.76);
+    }
+    12% {
+      opacity: 1;
+      transform: translate(-50%, 0) rotate(5deg) scale(1.03);
+    }
+    23%,
+    72% {
+      opacity: 1;
+      transform: translate(-50%, 0) rotate(-3deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, 9px) rotate(7deg) scale(0.92);
+    }
+  }
+
+  @keyframes encounterFade {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    12%,
+    72% {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation-name: encounterFade;
+  }
+
+  @media (max-width: 600px) {
+    font-size: 0.8rem;
   }
 
   html[data-arcade='true'] & {
-    left: 5px;
-    top: 5px;
-    padding: 3px 4px;
-    font-size: 8px;
+    bottom: 8px;
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+
+  html[data-arcade='true'] &[data-above-power='true'] {
+    bottom: 29px;
   }
 `;
 

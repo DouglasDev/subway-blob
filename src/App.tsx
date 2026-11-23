@@ -126,7 +126,8 @@ function snapshot(ride: Ride) {
     encounter: ride.encounter?.kind,
     inventory: [...ride.inventory],
     speech: ride.speech,
-    guestPressure: ride.guestPressure,
+    encounterNotice:
+      ride.encounter && ride.time - ride.encounter.began < 4.2 ? ride.encounter.began : undefined,
     sustainedPower:
       ride.shieldUntil > ride.time
         ? ('shield' as const)
@@ -504,11 +505,14 @@ export function App() {
             </Flow>
           )}
 
-          {hud.encounter && (
-            <EncounterNotice data-danger={hud.guestPressure > 0}>
+          {hud.encounter && hud.encounterNotice !== undefined && !ended && (
+            <EncounterNotice
+              key={hud.encounterNotice}
+              role="status"
+              data-above-power={Boolean(activePower || hud.sticky)}
+            >
               {ENCOUNTERS[hud.encounter].name}
               {actTitle ? ' · ' + actTitle : ''}
-              {hud.guestPressure > 0 && ' · Too close'}
             </EncounterNotice>
           )}
           {hud.sticky && !ended && <PowerNotice data-mode="sticky">Sticky floor</PowerNotice>}

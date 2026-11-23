@@ -451,6 +451,11 @@ export class Ride {
       at: this.time,
     };
 
+    if (this.time >= this.shieldUntil) {
+      this.tolerance = Math.max(0, this.tolerance - 0.1);
+      this.safeTime = 0;
+    }
+
     this.cues.push('shove');
   }
 
