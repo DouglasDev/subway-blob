@@ -181,6 +181,10 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
         (pulsePhase + dt * Math.PI * 2 * (0.22 + 2.55 * squished ** 1.6)) % (Math.PI * 2);
 
       const pulse = Math.sin(pulsePhase) * squished ** 1.45 * 0.25;
+      const flashTail = Math.max(0, 1 - (ride.time - ride.lastDamageAt) / 0.26);
+      const flashAngle = (ride.time - ride.damageBeganAt) * Math.PI * 2 * (1.9 + squished * 0.7);
+      const crest = flashTail > 0 ? 0.5 + 0.5 * Math.cos(flashAngle) : 0;
+      const damageFlash = flashTail * (0.16 + 0.84 * crest ** 3);
 
       updateBlob(
         popped,
@@ -190,7 +194,8 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
         ride.crowd.onboard,
         ride.time < ride.shieldUntil,
         ride.time < ride.fluidUntil,
-        pulse,
+        pulse * (1 - flashTail),
+        damageFlash,
       );
 
       if (popped) {

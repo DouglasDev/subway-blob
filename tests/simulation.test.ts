@@ -1156,6 +1156,12 @@ test('passive recovery waits for continuous safe time and resets in soda', () =>
   assert.equal(ride.tolerance, 0.5);
   ride.tick(idle);
   assert.ok(ride.tolerance > 0.5);
+  const firstRecovery = ride.recoveryBeganAt;
+
+  assert.equal(firstRecovery, ride.time);
+  assert.equal(ride.lastDamageAt, -Infinity);
+  ride.tick(idle);
+  assert.equal(ride.recoveryBeganAt, firstRecovery);
 
   ride.encounter = {
     kind: 'soda',
@@ -1168,13 +1174,29 @@ test('passive recovery waits for continuous safe time and resets in soda', () =>
 
   ride.tick(idle);
   assert.ok(ride.sticky);
-  const hurt = ride.tolerance;
+  const injuredAt = ride.time;
+
+  assert.equal(ride.lastDamageAt, injuredAt);
+  assert.equal(ride.damageBeganAt, injuredAt);
+  ride.tick(idle);
+  assert.equal(ride.lastDamageAt, ride.time);
+  assert.equal(ride.damageBeganAt, injuredAt);
+  const furtherHurt = ride.tolerance;
+  const lastDamage = ride.time;
 
   ride.encounter = null;
   for (let tick = 0; tick < 24; tick++) ride.tick(idle);
-  assert.equal(ride.tolerance, hurt);
+  assert.equal(ride.tolerance, furtherHurt);
+  assert.equal(ride.lastDamageAt, lastDamage);
   ride.tick(idle);
-  assert.ok(ride.tolerance > hurt);
+  assert.ok(ride.tolerance > furtherHurt);
+  assert.equal(ride.recoveryBeganAt, ride.time);
+
+  ride.inventory[0] = 'cool';
+  ride.usePower(0);
+  ride.tick(idle);
+  assert.equal(ride.recoveryBeganAt, ride.time);
+  assert.equal(ride.lastDamageAt, lastDamage);
 });
 
 test('weighted guest tones and even passenger tones replay independently', () => {

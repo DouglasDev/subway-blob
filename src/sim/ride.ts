@@ -60,6 +60,7 @@ const REACTION_DELAY = 2;
 const EARLY_DAMAGE_MULTIPLIER = 1.6;
 const DAMAGE_TAPER_STOPS = 6;
 const RECOVERY_DELAY = 1.25;
+const FEEDBACK_GAP = 0.22;
 
 export type Input = { x: number; z: number };
 
@@ -108,6 +109,10 @@ export class Ride {
   door = 0;
   travel = 0;
   tolerance = 1;
+  lastDamageAt = -Infinity;
+  damageBeganAt = -Infinity;
+  recoveryBeganAt = -Infinity;
+  private lastRecoveryAt = -Infinity;
   squeeze = 0;
   guestPressure = 0;
   shieldUntil = 0;
@@ -334,7 +339,11 @@ export class Ride {
     this.time += STEP;
     this.phaseTime += STEP;
     this.moveTrain();
+    const beforePower = this.tolerance;
+
     this.activatePowers();
+    const beforeDamage = this.tolerance;
+
     this.landOmny();
     const encounter = this.encounter;
     const soda = this.sodaSpill;
@@ -401,6 +410,19 @@ export class Ride {
           Math.min(nextTolerance, this.tolerance) - SODA_DRAIN * this.damageMultiplier * STEP,
         )
       : nextTolerance;
+
+    if (this.tolerance < beforeDamage - 1e-9) {
+      if (this.time - this.lastDamageAt > FEEDBACK_GAP) this.damageBeganAt = this.time;
+      this.lastDamageAt = this.time;
+    }
+
+    const healedByPower = beforeDamage > beforePower;
+
+    if (healedByPower || this.tolerance > beforeDamage) {
+      if (healedByPower || this.time - this.lastRecoveryAt > FEEDBACK_GAP)
+        this.recoveryBeganAt = this.time;
+      this.lastRecoveryAt = this.time;
+    }
 
     if (this.tolerance <= 1e-9) {
       this.tolerance = 0;

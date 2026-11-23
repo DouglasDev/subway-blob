@@ -33,7 +33,18 @@ class Media extends EventTarget {
 const buffer = new ArrayBuffer(1);
 
 class Node {
-  gain = { value: 0, setTargetAtTime() {} };
+  gain = {
+    value: 0,
+    setTargetAtTime() {},
+    setValueAtTime() {},
+    linearRampToValueAtTime() {},
+    exponentialRampToValueAtTime() {},
+  };
+  pitches: number[] = [];
+  frequency = {
+    setValueAtTime: (pitch: number) => this.pitches.push(pitch),
+    exponentialRampToValueAtTime: (pitch: number) => this.pitches.push(pitch),
+  };
   threshold = { value: 0 };
   ratio = { value: 0 };
   buffer?: ArrayBuffer;
@@ -54,9 +65,24 @@ class Node {
 
 class Context {
   static players: Node[] = [];
+  static latest: Context;
+  readonly oscillators: Node[] = [];
+  currentTime = 0;
   static resume?: () => void;
   destination = new Node();
   state = 'suspended';
+
+  constructor() {
+    Context.latest = this;
+  }
+
+  createOscillator() {
+    const oscillator = new Node();
+
+    this.oscillators.push(oscillator);
+
+    return oscillator;
+  }
 
   resume() {
     return new Promise<void>((resolve) => {
@@ -168,4 +194,47 @@ test('overlapping fallback clips play independently when Web Audio is unavailabl
   audio.reset();
   assert.equal(first.paused, true);
   assert.equal(second.paused, true);
+});
+
+test('blob moans descend with damage, respect the cooldown, and heal with rising blips', async (t) => {
+  Object.defineProperty(globalThis, 'Audio', { configurable: true, value: Media });
+  Object.defineProperty(globalThis, 'AudioContext', { configurable: true, value: Context });
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, arrayBuffer: async () => buffer }));
+  const audio = new RideAudio();
+
+  t.after(() => {
+    audio.dispose();
+    Reflect.deleteProperty(globalThis, 'Audio');
+    Reflect.deleteProperty(globalThis, 'AudioContext');
+  });
+
+  audio.unlock();
+  const context = Context.latest;
+
+  audio.damageMoan(0);
+  assert.equal(context.oscillators.length, 0);
+  Context.resume!();
+  await new Promise(setImmediate);
+
+  audio.damageMoan(0.1);
+  audio.damageMoan(0.8);
+  assert.equal(context.oscillators.length, 2);
+  context.currentTime = 2.3;
+  audio.damageMoan(0.8);
+  const [[high, highEnd], , [low, lowEnd]] = context.oscillators.map((node) => node.pitches);
+
+  assert.ok(low < high && highEnd < high && lowEnd < low);
+
+  audio.setMute(true);
+  audio.recoveryBlips();
+  assert.equal(context.oscillators.length, 4);
+  audio.setMute(false);
+  audio.recoveryBlips();
+  const [first, second] = context.oscillators.slice(-2).map((node) => node.pitches);
+
+  assert.ok(first[0] < first[1] && first[0] < second[0] && second[0] < second[1]);
+
+  audio.reset();
+  audio.damageMoan(0.3);
+  assert.equal(context.oscillators.length, 8);
 });

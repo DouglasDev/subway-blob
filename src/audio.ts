@@ -158,6 +158,7 @@ export class RideAudio {
   private allowed = false;
   private muted = false;
   private rolling = false;
+  private nextMoanAt = 0;
   private activePerformance?: HTMLAudioElement;
   private activeReaction?: HTMLAudioElement;
 
@@ -306,15 +307,49 @@ export class RideAudio {
   }
 
   private playSynth(cue: Cue) {
+    const impact = impacts[cue];
+
+    if (impact) this.impact(...impact);
+    this.playTones(sounds[cue] ?? []);
+  }
+
+  damageMoan(squished: number) {
+    const context = this.context;
+
+    if (!this.allowed || this.muted || context?.state !== 'running') return;
+    if (context.currentTime < this.nextMoanAt) return;
+
+    this.nextMoanAt = context.currentTime + 2.25;
+    const pitch = 168 - 72 * Math.max(0, Math.min(1, squished));
+
+    this.playTones([{ at: 0, length: 0.73, pitch, end: pitch * 0.68 }], 0.05, 0.13);
+
+    this.playTones(
+      [{ at: 0.035, length: 0.56, pitch: pitch * 2, end: pitch * 1.36, shape: 'sine' }],
+      0.017,
+      0.11,
+    );
+  }
+
+  recoveryBlips() {
+    if (!this.allowed || this.muted || this.context?.state !== 'running') return;
+
+    this.playTones(
+      [
+        { at: 0, length: 0.19, pitch: 195, end: 310, shape: 'sine' },
+        { at: 0.105, length: 0.27, pitch: 270, end: 415, shape: 'sine' },
+      ],
+      0.044,
+      0.04,
+    );
+  }
+
+  private playTones(notes: Tone[], peak = 0.073, attack = 0.018) {
     const { context, bus } = this;
 
     if (!context || !bus) return;
 
-    const impact = impacts[cue];
-
-    if (impact) this.impact(...impact);
-
-    for (const note of sounds[cue] ?? []) {
+    for (const note of notes) {
       const start = context.currentTime + note.at;
       const end = start + note.length;
       const oscillator = context.createOscillator();
@@ -324,7 +359,7 @@ export class RideAudio {
       oscillator.frequency.setValueAtTime(note.pitch, start);
       oscillator.frequency.exponentialRampToValueAtTime(note.end ?? note.pitch, end);
       gain.gain.setValueAtTime(0.001, start);
-      gain.gain.linearRampToValueAtTime(0.073, start + 0.018);
+      gain.gain.linearRampToValueAtTime(peak, start + attack);
       gain.gain.exponentialRampToValueAtTime(0.001, end);
       oscillator.connect(gain);
       gain.connect(bus);
@@ -500,6 +535,7 @@ export class RideAudio {
 
   reset() {
     this.playbackGeneration++;
+    this.nextMoanAt = 0;
     this.rolling = false;
     this.activePerformance = undefined;
     this.activeReaction = undefined;

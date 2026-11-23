@@ -323,6 +323,8 @@ export function App() {
     let frame = 0;
     let previous = performance.now();
     let lastTime = -1;
+    let lastDamage = -Infinity;
+    let lastRecovery = -Infinity;
     let lastPhase: Phase | undefined;
     let poppedAt = -1;
 
@@ -370,6 +372,18 @@ export function App() {
           cue === 'speaker' ? ride.encounter?.location : cue === 'sneeze' ? ride.sneeze : undefined;
 
         audio.cue(cue, source ? (source.x - ride.fluid.x) / 4.5 : 0);
+      }
+
+      if (ride.phase !== 'popped') {
+        if (ride.lastDamageAt > lastDamage) {
+          audio.damageMoan(1 - ride.tolerance);
+          lastDamage = ride.lastDamageAt;
+        }
+
+        if (ride.recoveryBeganAt > lastRecovery) {
+          audio.recoveryBlips();
+          lastRecovery = ride.recoveryBeganAt;
+        }
       }
 
       view.draw(dt);
