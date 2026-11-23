@@ -846,50 +846,60 @@ export const InventoryKey = styled.kbd`
   }
 `;
 
-export const EncounterNotice = styled.div`
+export const TOAST_SECONDS = 4.2;
+
+const Toast = styled.div`
+  --toast-direction: 1;
+  --toast-bottom: 18px;
+  --toast-step: 34px;
+
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: var(--toast-bottom);
   width: max-content;
   max-width: calc(100% - 42px);
   z-index: 2;
-  transform: translateX(-50%) rotate(-3deg);
-  background: #793526;
-  color: #fff2d3;
-  border: 2px solid #ffd190;
-  border-radius: 4px;
-  box-shadow: 3px 4px 0 #301a14;
-  padding: 7px 13px;
-  font: 800 0.95rem / 1.2 var(--sans);
+  transform: translateX(-50%) rotate(calc(-3deg * var(--toast-direction)));
   text-align: center;
   pointer-events: none;
-  animation: encounterToast 4.2s both;
 
-  &[data-above-power='true'] {
-    bottom: 52px;
+  &[data-level='1'] {
+    bottom: calc(var(--toast-bottom) + var(--toast-step));
   }
 
-  @keyframes encounterToast {
+  &[data-level='2'] {
+    bottom: calc(var(--toast-bottom) + 2 * var(--toast-step));
+  }
+
+  &[data-direction='reverse'] {
+    --toast-direction: -1;
+  }
+
+  &[data-direction] {
+    animation: rideToast ${TOAST_SECONDS}s both;
+  }
+
+  @keyframes rideToast {
     0% {
       opacity: 0;
-      transform: translate(-50%, 14px) rotate(-17deg) scale(0.76);
+      transform: translate(-50%, 14px) rotate(calc(-17deg * var(--toast-direction))) scale(0.76);
     }
     12% {
       opacity: 1;
-      transform: translate(-50%, 0) rotate(5deg) scale(1.03);
+      transform: translate(-50%, 0) rotate(calc(5deg * var(--toast-direction))) scale(1.03);
     }
     23%,
     72% {
       opacity: 1;
-      transform: translate(-50%, 0) rotate(-3deg);
+      transform: translate(-50%, 0) rotate(calc(-3deg * var(--toast-direction)));
     }
     100% {
       opacity: 0;
-      transform: translate(-50%, 9px) rotate(7deg) scale(0.92);
+      transform: translate(-50%, 9px) rotate(calc(7deg * var(--toast-direction))) scale(0.92);
     }
   }
 
-  @keyframes encounterFade {
+  @keyframes toastFade {
     0%,
     100% {
       opacity: 0;
@@ -901,21 +911,34 @@ export const EncounterNotice = styled.div`
   }
 
   @media (prefers-reduced-motion: reduce) {
-    animation-name: encounterFade;
+    &[data-direction] {
+      animation-name: toastFade;
+    }
   }
+
+  html[data-arcade='true'] & {
+    --toast-bottom: 8px;
+    --toast-step: 21px;
+
+    font-size: 10px;
+  }
+`;
+
+export const EncounterNotice = styled(Toast)`
+  background: #793526;
+  color: #fff2d3;
+  border: 2px solid #ffd190;
+  border-radius: 4px;
+  box-shadow: 3px 4px 0 #301a14;
+  padding: 7px 13px;
+  font: 800 0.95rem / 1.2 var(--sans);
 
   @media (max-width: 600px) {
     font-size: 0.8rem;
   }
 
   html[data-arcade='true'] & {
-    bottom: 8px;
     padding: 4px 7px;
-    font-size: 10px;
-  }
-
-  html[data-arcade='true'] &[data-above-power='true'] {
-    bottom: 29px;
   }
 `;
 
@@ -949,21 +972,14 @@ export const Speech = styled.span`
   }
 `;
 
-export const PowerNotice = styled.div`
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%) rotate(-3deg);
-  z-index: 1;
-  white-space: nowrap;
+export const PowerNotice = styled(Toast)`
   background: #d6f96e;
   color: #18290f;
   border: 2px solid #18290f;
   border-radius: 5px;
   box-shadow: 3px 3px 0 #18290f;
   padding: 7px 12px;
-  font: 800 0.86rem var(--sans);
-  pointer-events: none;
+  font: 800 0.86rem / 1.2 var(--sans);
 
   &[data-mode='crazy'] {
     background: #f1a6ff;
@@ -981,8 +997,6 @@ export const PowerNotice = styled.div`
   }
 
   html[data-arcade='true'] & {
-    bottom: 7px;
     padding: 3px 6px;
-    font-size: 10px;
   }
 `;

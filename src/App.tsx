@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 import { arcadeEmbedded, arcadeMode } from './arcade';
 import { createScene } from './render/scene';
 import { STATIONS, stationIndex } from './sim/route.ts';
@@ -48,6 +49,7 @@ import {
   Stop,
   StopName,
   Title,
+  TOAST_SECONDS,
   View,
 } from './ui';
 
@@ -127,19 +129,16 @@ function snapshot(ride: Ride) {
     inventory: [...ride.inventory],
     speech: ride.speech,
     encounterNotice:
-      ride.encounter && ride.time - ride.encounter.began < 4.2 ? ride.encounter.began : undefined,
-    sustainedPower:
-      ride.shieldUntil > ride.time
-        ? ('shield' as const)
-        : ride.fluidUntil > ride.time
-          ? ('fluid' as const)
-          : ride.expressUntil > ride.time
-            ? ('express' as const)
-            : undefined,
+      ride.encounter && ride.time - ride.encounter.began < TOAST_SECONDS
+        ? ride.encounter.began
+        : undefined,
+    powerNotice:
+      ride.animation && ride.time - ride.animation.began < TOAST_SECONDS
+        ? ride.animation
+        : undefined,
     variant: ride.encounter?.variant ?? 0,
     squeeze: ride.squeeze,
     sticky: ride.sticky,
-    power: ride.animation && ride.animation.until > ride.time ? ride.animation.cue : undefined,
   };
 }
 
@@ -150,6 +149,27 @@ function StopMarker({ name, label, current }: { name: string; label: string; cur
       <RouteDot data-current={!!current} />
       <StopName title={name}>{name}</StopName>
     </Stop>
+  );
+}
+
+function RideToast({
+  kind,
+  mode,
+  level,
+  children,
+}: {
+  kind: 'encounter' | 'power';
+  mode?: string;
+  level: number;
+  children: ReactNode;
+}) {
+  const [direction] = useState(() => (Math.random() < 0.5 ? 'forward' : 'reverse'));
+  const Notice = kind === 'encounter' ? EncounterNotice : PowerNotice;
+
+  return (
+    <Notice role="status" data-direction={direction} data-mode={mode} data-level={level}>
+      {children}
+    </Notice>
   );
 }
 
@@ -412,7 +432,6 @@ export function App() {
         : hud.encounter === 'prank'
           ? PRANKS[hud.variant].name
           : undefined;
-  const activePower = hud.power ?? hud.sustainedPower;
   const ready = hud.phase === 'ready';
   const ended = hud.phase === 'popped';
   const result = ended && showResult;
@@ -506,18 +525,25 @@ export function App() {
           )}
 
           {hud.encounter && hud.encounterNotice !== undefined && !ended && (
-            <EncounterNotice
-              key={hud.encounterNotice}
-              role="status"
-              data-above-power={Boolean(activePower || hud.sticky)}
+            <RideToast
+              key={`encounter:${hud.encounterNotice}`}
+              kind="encounter"
+              level={Number(Boolean(hud.powerNotice)) + Number(hud.sticky)}
             >
               {ENCOUNTERS[hud.encounter].name}
               {actTitle ? ' · ' + actTitle : ''}
-            </EncounterNotice>
+            </RideToast>
           )}
           {hud.sticky && !ended && <PowerNotice data-mode="sticky">Sticky floor</PowerNotice>}
-          {activePower && !ended && !hud.sticky && (
-            <PowerNotice data-mode={activePower}>{POWERS[activePower].name}</PowerNotice>
+          {hud.powerNotice && !ended && (
+            <RideToast
+              key={`power:${hud.powerNotice.began}`}
+              kind="power"
+              mode={hud.powerNotice.cue}
+              level={Number(hud.sticky)}
+            >
+              {POWERS[hud.powerNotice.cue].name}
+            </RideToast>
           )}
           {hud.speech && <Speech ref={bubble}>{hud.speech}</Speech>}
 

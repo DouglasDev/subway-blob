@@ -235,7 +235,7 @@ export function buildRiders(scene: T.Object3D) {
       if (phoneHand) {
         hinge(0, 1.38, 0, 0.36, upper);
         face = headMatrix.copy(jointMatrix).multiply(neckOffset);
-        hinge(phoneHand * 0.18, 1.075, 0.35, 0.37, upper);
+        hinge(phoneHand * 0.12, 1.11, 0.438, 0.37, upper);
         stamp(phones, phoneCount, 0x1b2029, 0, 0, 0, 0.1326, 0.221, 0.0429, 0, jointMatrix);
 
         stamp(
