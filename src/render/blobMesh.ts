@@ -131,8 +131,6 @@ export function buildBlob(scene: T.Object3D, fluid: Fluid, blocked: Uint8Array) 
   const red = new T.Color(0xf74136);
   const blue = new T.Color(0x54a9ff);
   const aqua = new T.Color(0x53f3c7);
-  const hurt = new T.Color(0xffcfaf);
-  const shieldHurt = new T.Color(0xc3edff);
 
   return (
     popped: boolean,
@@ -154,7 +152,7 @@ export function buildBlob(scene: T.Object3D, fluid: Fluid, blocked: Uint8Array) 
     if (quiet) slime.color.copy(blue).multiplyScalar(1 + pulse * 0.5);
     else if (superFluid) slime.color.lerp(aqua, 0.64);
 
-    slime.color.lerp(quiet ? shieldHurt : hurt, damageFlash * 0.74);
+    slime.color.multiplyScalar(1 - 0.64 * damageFlash);
 
     const fatigue = T.MathUtils.clamp((riders - 12) / 55, 0, 1);
 
@@ -170,7 +168,6 @@ export function buildBlob(scene: T.Object3D, fluid: Fluid, blocked: Uint8Array) 
     }
 
     slime.emissive.copy(slime.color).multiplyScalar(0.38);
-    slime.emissiveIntensity = 0.28 + 0.89 * damageFlash;
     group.position.x = wobble * 0.13;
     group.visible = !popped;
     group.position.y = 0.12 * Math.abs(wobble);

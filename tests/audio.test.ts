@@ -196,7 +196,7 @@ test('overlapping fallback clips play independently when Web Audio is unavailabl
   assert.equal(second.paused, true);
 });
 
-test('blob moans descend with damage, respect the cooldown, and heal with rising blips', async (t) => {
+test('blob moans descend with damage and recovery blips rise', async (t) => {
   Object.defineProperty(globalThis, 'Audio', { configurable: true, value: Media });
   Object.defineProperty(globalThis, 'AudioContext', { configurable: true, value: Context });
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, arrayBuffer: async () => buffer }));
@@ -216,11 +216,9 @@ test('blob moans descend with damage, respect the cooldown, and heal with rising
   Context.resume!();
   await new Promise(setImmediate);
 
-  audio.damageMoan(0.1);
-  audio.damageMoan(0.8);
-  assert.equal(context.oscillators.length, 2);
-  context.currentTime = 2.3;
-  audio.damageMoan(0.8);
+  audio.damageMoan(0.25);
+  audio.damageMoan(0.75);
+  assert.equal(context.oscillators.length, 4);
   const [[high, highEnd], , [low, lowEnd]] = context.oscillators.map((node) => node.pitches);
 
   assert.ok(low < high && highEnd < high && lowEnd < low);
@@ -233,8 +231,4 @@ test('blob moans descend with damage, respect the cooldown, and heal with rising
   const [first, second] = context.oscillators.slice(-2).map((node) => node.pitches);
 
   assert.ok(first[0] < first[1] && first[0] < second[0] && second[0] < second[1]);
-
-  audio.reset();
-  audio.damageMoan(0.3);
-  assert.equal(context.oscillators.length, 8);
 });

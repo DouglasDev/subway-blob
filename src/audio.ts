@@ -158,7 +158,6 @@ export class RideAudio {
   private allowed = false;
   private muted = false;
   private rolling = false;
-  private nextMoanAt = 0;
   private activePerformance?: HTMLAudioElement;
   private activeReaction?: HTMLAudioElement;
 
@@ -317,9 +316,7 @@ export class RideAudio {
     const context = this.context;
 
     if (!this.allowed || this.muted || context?.state !== 'running') return;
-    if (context.currentTime < this.nextMoanAt) return;
 
-    this.nextMoanAt = context.currentTime + 2.25;
     const pitch = 168 - 72 * Math.max(0, Math.min(1, squished));
 
     this.playTones([{ at: 0, length: 0.73, pitch, end: pitch * 0.68 }], 0.05, 0.13);
@@ -535,7 +532,6 @@ export class RideAudio {
 
   reset() {
     this.playbackGeneration++;
-    this.nextMoanAt = 0;
     this.rolling = false;
     this.activePerformance = undefined;
     this.activeReaction = undefined;

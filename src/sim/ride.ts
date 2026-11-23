@@ -61,6 +61,7 @@ const EARLY_DAMAGE_MULTIPLIER = 1.6;
 const DAMAGE_TAPER_STOPS = 6;
 const RECOVERY_DELAY = 1.25;
 const FEEDBACK_GAP = 0.22;
+const MOAN_HEALTH_LOSS = 0.25;
 
 export type Input = { x: number; z: number };
 
@@ -111,6 +112,8 @@ export class Ride {
   tolerance = 1;
   lastDamageAt = -Infinity;
   damageBeganAt = -Infinity;
+  damageMoanAt = -Infinity;
+  private moanBaseline = 1;
   recoveryBeganAt = -Infinity;
   private lastRecoveryAt = -Infinity;
   squeeze = 0;
@@ -411,9 +414,16 @@ export class Ride {
         )
       : nextTolerance;
 
+    this.moanBaseline = Math.max(this.moanBaseline, beforeDamage, this.tolerance);
+
     if (this.tolerance < beforeDamage - 1e-9) {
       if (this.time - this.lastDamageAt > FEEDBACK_GAP) this.damageBeganAt = this.time;
       this.lastDamageAt = this.time;
+
+      if (this.moanBaseline - this.tolerance + 1e-9 >= MOAN_HEALTH_LOSS) {
+        this.damageMoanAt = this.time;
+        this.moanBaseline = this.tolerance;
+      }
     }
 
     const healedByPower = beforeDamage > beforePower;

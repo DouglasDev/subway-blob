@@ -323,7 +323,7 @@ export function App() {
     let frame = 0;
     let previous = performance.now();
     let lastTime = -1;
-    let lastDamage = -Infinity;
+    let lastMoan = -Infinity;
     let lastRecovery = -Infinity;
     let lastPhase: Phase | undefined;
     let poppedAt = -1;
@@ -375,9 +375,9 @@ export function App() {
       }
 
       if (ride.phase !== 'popped') {
-        if (ride.lastDamageAt > lastDamage) {
+        if (ride.damageMoanAt > lastMoan) {
           audio.damageMoan(1 - ride.tolerance);
-          lastDamage = ride.lastDamageAt;
+          lastMoan = ride.damageMoanAt;
         }
 
         if (ride.recoveryBeganAt > lastRecovery) {

@@ -1199,6 +1199,59 @@ test('passive recovery waits for continuous safe time and resets in soda', () =>
   assert.equal(ride.lastDamageAt, lastDamage);
 });
 
+test('the blob moans after each additional 25 points of health lost', () => {
+  const ride = new Ride();
+  const idle = { x: 0, z: 0 };
+
+  ride.start();
+  ride.crowd.riders = [];
+
+  ride.encounter = {
+    kind: 'soda',
+    began: 0,
+    expires: 1,
+    variant: 0,
+    dialogueAt: 0,
+    location: idle,
+  };
+
+  ride.tolerance = 0.755;
+  ride.tick(idle);
+
+  assert.ok(ride.tolerance > 0.75);
+  assert.equal(ride.lastDamageAt, ride.time);
+  assert.equal(ride.damageMoanAt, -Infinity);
+
+  ride.tolerance = 0.75;
+  ride.tick(idle);
+  const first = ride.damageMoanAt;
+  const firstHealth = ride.tolerance;
+
+  assert.equal(first, ride.time);
+  for (let tick = 0; tick < 5; tick++) ride.tick(idle);
+  assert.equal(ride.damageMoanAt, first);
+
+  ride.tolerance = firstHealth - 0.25;
+  ride.tick(idle);
+  const second = ride.damageMoanAt;
+
+  assert.equal(second, ride.time);
+
+  ride.inventory[0] = 'cool';
+  ride.usePower(0);
+  ride.tick(idle);
+  assert.equal(ride.damageMoanAt, second);
+  const healed = ride.tolerance;
+
+  ride.tolerance = healed - 0.24;
+  ride.tick(idle);
+  assert.equal(ride.damageMoanAt, second);
+
+  ride.tolerance = healed - 0.25;
+  ride.tick(idle);
+  assert.equal(ride.damageMoanAt, ride.time);
+});
+
 test('weighted guest tones and even passenger tones replay independently', () => {
   const draw = (seed: number, stopOffset: number) => {
     const crowd = new Crowd(seed);
