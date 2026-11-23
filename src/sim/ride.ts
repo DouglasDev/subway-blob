@@ -61,7 +61,7 @@ const EARLY_DAMAGE_MULTIPLIER = 1.6;
 const DAMAGE_TAPER_STOPS = 6;
 const RECOVERY_DELAY = 1.25;
 const FEEDBACK_GAP = 0.22;
-const MOAN_HEALTH_LOSS = 0.25;
+const MOAN_HEALTH_LOSS = 0.2;
 
 export type Input = { x: number; z: number };
 

@@ -87,6 +87,8 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
   let aspect = 1;
   let cameraLift = 0;
   let pulsePhase = 0;
+  let damagePhase = 0;
+  let lastDamageStart = -Infinity;
 
   const resize = new ResizeObserver(() => {
     const { clientWidth, clientHeight } = canvas;
@@ -182,9 +184,17 @@ export function createScene(canvas: HTMLCanvasElement, ride: Ride, arcade = fals
 
       const pulse = Math.sin(pulsePhase) * squished ** 1.45 * 0.25;
       const flashTail = Math.max(0, 1 - (ride.time - ride.lastDamageAt) / 0.26);
-      const flashAngle = (ride.time - ride.damageBeganAt) * Math.PI * 2 * (1.9 + squished * 0.7);
-      const crest = flashTail > 0 ? 0.5 + 0.5 * Math.cos(flashAngle) : 0;
-      const damageFlash = flashTail * (0.16 + 0.84 * crest ** 3);
+      const severity = squished ** 1.45;
+
+      if (ride.damageBeganAt !== lastDamageStart) {
+        lastDamageStart = ride.damageBeganAt;
+        damagePhase = 0;
+      } else if (flashTail > 0) {
+        damagePhase = (damagePhase + dt * Math.PI * 2 * (0.48 + 2.12 * severity)) % (Math.PI * 2);
+      }
+
+      const crest = 0.5 + 0.5 * Math.cos(damagePhase);
+      const damageFlash = flashTail * (0.18 + 0.82 * severity) * (0.16 + 0.84 * crest ** 3);
 
       updateBlob(
         popped,

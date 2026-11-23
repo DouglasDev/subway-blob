@@ -1199,7 +1199,7 @@ test('passive recovery waits for continuous safe time and resets in soda', () =>
   assert.equal(ride.lastDamageAt, lastDamage);
 });
 
-test('the blob moans after each additional 25 points of health lost', () => {
+test('the blob moans after each additional 20 points of health lost', () => {
   const ride = new Ride();
   const idle = { x: 0, z: 0 };
 
@@ -1215,14 +1215,14 @@ test('the blob moans after each additional 25 points of health lost', () => {
     location: idle,
   };
 
-  ride.tolerance = 0.755;
+  ride.tolerance = 0.805;
   ride.tick(idle);
 
-  assert.ok(ride.tolerance > 0.75);
+  assert.ok(ride.tolerance > 0.8);
   assert.equal(ride.lastDamageAt, ride.time);
   assert.equal(ride.damageMoanAt, -Infinity);
 
-  ride.tolerance = 0.75;
+  ride.tolerance = 0.8;
   ride.tick(idle);
   const first = ride.damageMoanAt;
   const firstHealth = ride.tolerance;
@@ -1231,7 +1231,7 @@ test('the blob moans after each additional 25 points of health lost', () => {
   for (let tick = 0; tick < 5; tick++) ride.tick(idle);
   assert.equal(ride.damageMoanAt, first);
 
-  ride.tolerance = firstHealth - 0.25;
+  ride.tolerance = firstHealth - 0.2;
   ride.tick(idle);
   const second = ride.damageMoanAt;
 
@@ -1243,11 +1243,11 @@ test('the blob moans after each additional 25 points of health lost', () => {
   assert.equal(ride.damageMoanAt, second);
   const healed = ride.tolerance;
 
-  ride.tolerance = healed - 0.24;
+  ride.tolerance = healed - 0.19;
   ride.tick(idle);
   assert.equal(ride.damageMoanAt, second);
 
-  ride.tolerance = healed - 0.25;
+  ride.tolerance = healed - 0.2;
   ride.tick(idle);
   assert.equal(ride.damageMoanAt, ride.time);
 });
